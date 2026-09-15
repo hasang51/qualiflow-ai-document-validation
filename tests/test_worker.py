@@ -140,3 +140,35 @@ def test_worker_failure_path(minimal_pdf_bytes: bytes):
         assert job.error_message
     finally:
         db.close()
+
+
+def test_worker_schema_failure_payload_is_succeeded_review():
+    from app.services.storage.factory import reset_storage_backend_cache
+    from config.settings import reset_settings_cache
+
+    reset_settings_cache()
+    reset_storage_backend_cache()
+    db = SessionLocal()
+    try:
+        from app.services.storage.factory import get_storage_backend
+
+        storage = get_storage_backend()
+        key = "uploads/test/schema-fail.pdf"
+        storage.put_bytes(key, b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n", content_type="application/pdf")
+        job = create_queued_job(db, input_object_key=key, original_filename="schema-fail.pdf")
+        job_id = job.id
+    finally:
+        db.close()
+
+    result = _minimal_extraction_result()
+    result["review_reasons"] = ["extraction_schema_invalid", "model_output_unusable"]
+    with patch("app.workers.tasks.process_pdf_bytes", return_value=result):
+        process_document_job(job_id)
+
+    db = SessionLocal()
+    try:
+        job = get_job(db, job_id)
+        assert job is not None
+        assert job.status == "succeeded"
+    finally:
+        db.close()

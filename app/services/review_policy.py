@@ -132,6 +132,8 @@ AUTO_ACCEPT_BLOCKING_EXACT = frozenset(
         "row_count_inconsistent",
         "unsupported_document_type",
         "validation_blocking_error",
+        "extraction_schema_invalid",
+        "model_output_unusable",
     }
 )
 AUTO_ACCEPT_BLOCKING_PREFIXES = (

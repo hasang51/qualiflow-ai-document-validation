@@ -183,6 +183,8 @@ class AutoAcceptBlockingContractTests(unittest.TestCase):
             "ambiguous_grade",
             "mechanical_table_alignment_uncertain",
             "traceability_identifier_ocr_uncertain",
+            "extraction_schema_invalid",
+            "model_output_unusable",
         }
         self.assertTrue(required.issubset(AUTO_ACCEPT_BLOCKING_EXACT))
 
@@ -436,6 +438,20 @@ class AutoAcceptSafetyRegressionTests(unittest.TestCase):
         self.assertNotEqual(payload.get("processing_decision"), "auto_accept")
         self.assertIn("missing_critical_field:grade", payload["review_reasons"])
         self.assertNotIn("confidence_below_threshold", payload["review_reasons"])
+
+    def test_schema_failure_tokens_never_auto_accept(self):
+        extraction = _make_extraction(
+            items=[_compliant_item()],
+            confidence_score=1.0,
+            needs_review=True,
+            review_reasons=["extraction_schema_invalid", "model_output_unusable"],
+        )
+        payload = _run_decision_pipeline(extraction, profile=_clean_profile())
+        self.assertNotEqual(payload.get("status"), "COMPLETED")
+        self.assertTrue(payload.get("needs_review"))
+        self.assertIsNone(payload.get("auto_accept_evidence"))
+        self.assertTrue(is_auto_accept_blocking_reason("extraction_schema_invalid"))
+        self.assertTrue(is_auto_accept_blocking_reason("model_output_unusable"))
 
 
 if __name__ == "__main__":

@@ -53,6 +53,10 @@ CRITICAL_IDENTIFIER_FIELDS = (
 )
 DEGRADED_IDENTIFIER_QUALITY_CLASSES = {"noisy_scan", "degraded_scan", "severe_scan"}
 IDENTIFIER_CONFIDENCE_THRESHOLD = 0.80
+SCHEMA_FAILURE_TOKENS = (
+    "extraction_schema_invalid",
+    "model_output_unusable",
+)
 
 
 METADATA_TOOL: dict[str, Any] = {
@@ -879,11 +883,24 @@ def run_multi_stage_extraction(
     profile: DocumentProfile | None = None,
     route_decision: RouteDecision | None = None,
 ) -> UniversalDocumentExtraction:
+    schema_failure = False
     try:
         metadata, usage_a = _run_metadata_extraction(None, pages)
         item_payload, usage_b = _run_row_extraction(None, pages, metadata)
     except HTTPException:
         raise
+    except ExtractionOutputError:
+        logger.exception("LLM structured output failed; routing to review.")
+        schema_failure = True
+        metadata = {
+            "supplier_name": "Unknown supplier",
+            "document_type": "Unknown document",
+            "confidence_score": 0.0,
+        }
+        item_payload = {"total_items_detected": 0, "items": []}
+        usage_a = {"input_tokens": 0, "output_tokens": 0, "latency_ms": 0}
+        usage_b = {"input_tokens": 0, "output_tokens": 0, "latency_ms": 0}
+        preprocessing_meta["schema_failure"] = True
     except ExtractionProviderError:
         logger.exception("LLM extraction failed.")
         raise HTTPException(status_code=502, detail="Vision extraction failed.") from None
@@ -1080,6 +1097,12 @@ def run_multi_stage_extraction(
         ai_analysis_remarks=metadata.get("ai_analysis_remarks"),
         stage_b_extraction_audit=stage_b_audit,
     )
+
+    if schema_failure:
+        extraction.review_reasons.extend(SCHEMA_FAILURE_TOKENS)
+        extraction.needs_review = True
+        extraction.confidence_score = 0.0
+        extraction.raw_model_confidence = 0.0
 
     if suppression_events:
         extraction.review_reasons.append("critical_identifier_unverified")
