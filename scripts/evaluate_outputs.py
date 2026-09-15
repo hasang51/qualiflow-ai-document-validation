@@ -595,6 +595,20 @@ def _evaluate_academic_document(
     unsafe_auto_accept = int(review_required_gold and pred_review is False)
 
     latency = _coerce_float(pred_fields.get("latency_ms")) if not prediction_missing else None
+    pred_source = dict(prediction_payload or {})
+    schema_failure = 0
+    if not prediction_missing:
+        if pred_source.get("schema_failure") is True:
+            schema_failure = 1
+        reasons = pred_source.get("review_reasons") or []
+        if isinstance(reasons, list) and "extraction_schema_invalid" in reasons:
+            schema_failure = 1
+    usage = pred_source.get("llm_usage") if isinstance(pred_source.get("llm_usage"), dict) else {}
+    input_tokens = int(usage.get("total_input_tokens") or pred_source.get("input_tokens") or 0)
+    output_tokens = int(usage.get("total_output_tokens") or pred_source.get("output_tokens") or 0)
+    estimated_cost = usage.get("estimated_cost_usd")
+    if estimated_cost is None:
+        estimated_cost = pred_source.get("estimated_cost_usd")
 
     doc_row = {
         "doc_id": doc_id,
@@ -617,6 +631,10 @@ def _evaluate_academic_document(
         "missing_required": missing_required,
         "required_total": required_total,
         "latency_ms": latency,
+        "schema_failure": schema_failure,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimated_cost_usd": estimated_cost if estimated_cost is not None else 0,
     }
     return doc_row, field_rows, failure_rows
 
@@ -636,7 +654,11 @@ def _aggregate_academic(rows: list[dict[str, Any]]) -> dict[str, Any]:
     unsafe_total = sum(int(row["unsafe_auto_accept_total"]) for row in rows)
     missing_required = sum(int(row["missing_required"]) for row in rows)
     required_total = sum(int(row["required_total"]) for row in rows)
-    latencies = [float(row["latency_ms"]) for row in rows if row["latency_ms"] is not None]
+    latencies = [float(row["latency_ms"]) for row in rows if row.get("latency_ms") is not None]
+    schema_failures = sum(int(row.get("schema_failure") or 0) for row in rows)
+    input_tokens = sum(int(row.get("input_tokens") or 0) for row in rows)
+    output_tokens = sum(int(row.get("output_tokens") or 0) for row in rows)
+    estimated_cost = sum(float(row.get("estimated_cost_usd") or 0) for row in rows)
 
     return {
         "n_documents": len(rows),
@@ -647,7 +669,12 @@ def _aggregate_academic(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "review_rate": _rate(review_count, review_known),
         "unsafe_auto_accept_rate": _rate(unsafe, unsafe_total),
         "missing_required_field_rate": _rate(missing_required, required_total),
+        "schema_failures": schema_failures,
+        "schema_failure_rate": _rate(schema_failures, len(rows)),
         "average_latency_ms": _average(latencies) if latencies else "",
+        "total_input_tokens": input_tokens,
+        "total_output_tokens": output_tokens,
+        "estimated_cost_usd": round(estimated_cost, 6),
     }
 
 

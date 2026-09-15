@@ -1,0 +1,21 @@
+{
+  "supplier_name": "Acme Steel GmbH",
+  "document_type": "Mill Test Certificate",
+  "items": [
+    {
+      "heat_number": null,
+      "grade": "S195"
+    }
+  ],
+  "needs_review": true,
+  "review_required": true,
+  "review_reasons": [
+    "missing_critical_field:heat_number"
+  ],
+  "latency_ms": 11,
+  "llm_usage": {
+    "total_input_tokens": 8,
+    "total_output_tokens": 4,
+    "estimated_cost_usd": 0
+  }
+}

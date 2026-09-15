@@ -1,0 +1,20 @@
+{
+  "supplier_name": "Acme Steel GmbH",
+  "document_type": "Mill Test Certificate",
+  "items": [
+    {
+      "heat_number": "HEAT-SYN-004"
+    }
+  ],
+  "needs_review": true,
+  "review_required": true,
+  "review_reasons": [
+    "critical_identifier_unverified"
+  ],
+  "latency_ms": 15,
+  "llm_usage": {
+    "total_input_tokens": 12,
+    "total_output_tokens": 6,
+    "estimated_cost_usd": 0
+  }
+}

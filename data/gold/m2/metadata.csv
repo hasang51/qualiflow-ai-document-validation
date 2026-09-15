@@ -1,0 +1,7 @@
+doc_id,file_name,quality_bucket,document_type,pages,has_text_layer,ground_truth_path
+syn001,syn001.pdf,digital_clean,Mill Test Certificate,1,true,ground_truth/syn001.json
+syn002,syn002.pdf,digital_clean,Mill Test Certificate,1,true,ground_truth/syn002.json
+syn003,syn003.pdf,severe_scan,Mill Test Certificate,1,true,ground_truth/syn003.json
+syn004,syn004.pdf,digital_clean,Mill Test Certificate,1,true,ground_truth/syn004.json
+syn005,syn005.pdf,digital_clean,Mill Test Certificate,1,true,ground_truth/syn005.json
+syn006,syn006.pdf,digital_clean,Mill Test Certificate,1,true,ground_truth/syn006.json

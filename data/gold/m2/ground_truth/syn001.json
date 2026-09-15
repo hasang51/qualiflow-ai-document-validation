@@ -1,0 +1,13 @@
+{
+  "supplier_name": "Acme Steel GmbH",
+  "document_type": "Mill Test Certificate",
+  "heat_number": "HEAT-SYN-001",
+  "grade": "S195",
+  "yield_strength_mpa": 250,
+  "tensile_strength_mpa": 420,
+  "elongation_percentage": 28,
+  "review_required": true,
+  "review_reasons": [
+    "synthetic_fixture"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "supplier_name": "Acme Steel GmbH",
+  "document_type": "Mill Test Certificate",
+  "items": [],
+  "needs_review": true,
+  "review_required": true,
+  "review_reasons": [
+    "severe_scan_quality"
+  ],
+  "latency_ms": 20,
+  "llm_usage": {
+    "total_input_tokens": 9,
+    "total_output_tokens": 3,
+    "estimated_cost_usd": 0
+  }
+}

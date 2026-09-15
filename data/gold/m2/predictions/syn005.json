@@ -1,0 +1,18 @@
+{
+  "supplier_name": "Unknown supplier",
+  "document_type": "Unknown document",
+  "items": [],
+  "needs_review": true,
+  "review_required": true,
+  "schema_failure": true,
+  "review_reasons": [
+    "extraction_schema_invalid",
+    "model_output_unusable"
+  ],
+  "latency_ms": 5,
+  "llm_usage": {
+    "total_input_tokens": 2,
+    "total_output_tokens": 0,
+    "estimated_cost_usd": 0
+  }
+}

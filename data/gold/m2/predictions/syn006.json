@@ -1,0 +1,24 @@
+{
+  "supplier_name": "Acme Steel GmbH",
+  "document_type": "Mill Test Certificate",
+  "items": [
+    {
+      "mechanical_properties": {
+        "yield_strength_mpa": 255,
+        "tensile_strength_mpa": 410,
+        "elongation_percentage": 27
+      }
+    }
+  ],
+  "needs_review": true,
+  "review_required": true,
+  "review_reasons": [
+    "mechanical_table_alignment_uncertain"
+  ],
+  "latency_ms": 18,
+  "llm_usage": {
+    "total_input_tokens": 14,
+    "total_output_tokens": 7,
+    "estimated_cost_usd": 0
+  }
+}
