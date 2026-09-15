@@ -15,12 +15,14 @@ def get_extraction_provider() -> ExtractionProvider:
 
         return MockExtractionProvider()
     if name == "bedrock":
-        from app.services.extraction_providers.bedrock_provider import BedrockExtractionProvider
+        from app.services.extraction_providers.bedrock_provider import BedrockGemmaProvider
 
-        return BedrockExtractionProvider()
-    from app.services.extraction_providers.anthropic_provider import AnthropicExtractionProvider
+        return BedrockGemmaProvider()
+    from app.services.extraction_providers.base import ExtractionProviderError
 
-    return AnthropicExtractionProvider()
+    raise ExtractionProviderError(
+        f"Unsupported EXTRACTION_PROVIDER={name!r}. Use 'mock' or 'bedrock'."
+    )
 
 
 def reset_extraction_provider_cache() -> None:

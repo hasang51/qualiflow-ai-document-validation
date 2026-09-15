@@ -7,11 +7,10 @@ from app.services.preprocessing import ProcessedPage
 from config.settings import get_settings
 
 
-class BedrockExtractionProvider:
-    """Boundary for Amazon Bedrock Claude. AWS infrastructure is out of M1 scope.
+class BedrockGemmaProvider:
+    """Amazon Bedrock Gemma extraction boundary.
 
-    This class is the integration seam (model id, region, converse-style invoke).
-    It does not provision accounts, IAM, or networking.
+    Invoke is wired in a later M2 commit. This class remains the factory target.
     """
 
     name = "bedrock"
@@ -20,7 +19,7 @@ class BedrockExtractionProvider:
         del pages
         self._ensure_configured()
         raise ExtractionProviderError(
-            "BedrockExtractionProvider is a boundary only; invoke_model is not wired in M1."
+            "BedrockGemmaProvider is a boundary only; invoke_model is not wired in M1."
         )
 
     def extract_line_items(
@@ -31,7 +30,7 @@ class BedrockExtractionProvider:
         del pages, metadata
         self._ensure_configured()
         raise ExtractionProviderError(
-            "BedrockExtractionProvider is a boundary only; invoke_model is not wired in M1."
+            "BedrockGemmaProvider is a boundary only; invoke_model is not wired in M1."
         )
 
     def _ensure_configured(self) -> None:
@@ -40,3 +39,6 @@ class BedrockExtractionProvider:
             raise ExtractionProviderError(
                 "BEDROCK_MODEL_ID is required when EXTRACTION_PROVIDER=bedrock."
             )
+
+
+BedrockExtractionProvider = BedrockGemmaProvider

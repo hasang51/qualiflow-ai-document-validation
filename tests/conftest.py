@@ -16,7 +16,7 @@ os.environ.setdefault("ANTHROPIC_MODEL", "")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["OBJECT_STORAGE_BACKEND"] = "local"
 os.environ.setdefault("STORAGE_DIR", "./data/test_storage")
-os.environ.setdefault("EXTRACTION_PROVIDER", "mock")
+os.environ["EXTRACTION_PROVIDER"] = "mock"
 
 from config.settings import reset_settings_cache
 

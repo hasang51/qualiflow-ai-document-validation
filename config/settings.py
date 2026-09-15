@@ -65,10 +65,22 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
 
     anthropic_api_key: str = ""
-    anthropic_model: str = Field(default="", description="Anthropic model id; must be set via env for LLM calls")
-    extraction_provider: Literal["anthropic", "mock", "bedrock"] = "anthropic"
+    anthropic_model: str = Field(default="", description="Deprecated; unused on the M2 production path")
+    extraction_provider: Literal["mock", "bedrock"] = "mock"
     bedrock_region: str = "eu-central-1"
-    bedrock_model_id: str = ""
+    bedrock_model_id: str = Field(
+        default="google.gemma-4-26b-a4b",
+        description="Bedrock Mantle model id (Gemma 4 26B-A4B).",
+    )
+    bedrock_input_cost_per_million: float = Field(
+        default=0.16,
+        description="Estimated eu-central-1 Standard USD per 1M input tokens; not billing-grade.",
+    )
+    bedrock_output_cost_per_million: float = Field(
+        default=0.48,
+        description="Estimated eu-central-1 Standard USD per 1M output tokens; not billing-grade.",
+    )
+    bedrock_max_request_bytes: int = 3_500_000
 
     pdf_dpi: int = 400
     poppler_path: str = ""
@@ -126,6 +138,10 @@ class Settings(BaseSettings):
             errors.append("DEBUG must be false in production.")
         if not self.rate_limit_enabled:
             errors.append("RATE_LIMIT_ENABLED must be true in production.")
+        if self.extraction_provider != "bedrock":
+            errors.append("EXTRACTION_PROVIDER must be 'bedrock' in production.")
+        if not self.bedrock_model_id.strip():
+            errors.append("BEDROCK_MODEL_ID must be set in production.")
         if errors:
             raise ValueError(" ".join(errors))
         return self
