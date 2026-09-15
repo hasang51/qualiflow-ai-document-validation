@@ -1,0 +1,90 @@
+[project]
+name = "qualiflow"
+version = "7.0.0"
+description = "QualiFlow industrial document verification API"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.115.12",
+    "uvicorn[standard]==0.34.2",
+    "python-multipart==0.0.20",
+    "pydantic==2.11.3",
+    "pydantic-settings==2.8.1",
+    "email-validator==2.2.0",
+    "sqlalchemy==2.0.40",
+    "alembic==1.15.2",
+    "pyjwt==2.10.1",
+    "bcrypt==5.0.0",
+    "psycopg2-binary==2.9.10",
+    "redis==5.2.1",
+    "rq==2.1.0",
+    "slowapi==0.1.9",
+    "boto3==1.37.6",
+    "pdf2image==1.17.0",
+    "pypdf>=4.0.0,<6",
+    "pillow>=11.0.0,<12",
+    "opencv-python-headless==4.11.0.86",
+    "numpy==2.2.4",
+    "requests==2.32.3",
+    "anthropic>=0.30.0,<1",
+    "python-dotenv==1.1.0",
+    "pyyaml>=6.0.2,<7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+    "pytest-cov==6.1.1",
+    "httpx==0.28.1",
+    "ruff==0.11.8",
+    "pyright==1.1.400",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["app", "config", "db"]
+branch = true
+omit = [
+    "app/services/ocr_service.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 65
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["app", "config", "db", "tests"]
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E402", "F401", "F402", "F841", "W291", "W292", "W293"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+include = [
+    "config",
+    "db",
+    "app/security.py",
+    "app/deps.py",
+    "app/api",
+    "app/services/extraction_providers",
+    "app/services/jobs",
+]
+exclude = ["**/__pycache__", ".venv", "frontend", "scripts"]
+reportMissingImports = true
+reportMissingTypeStubs = false

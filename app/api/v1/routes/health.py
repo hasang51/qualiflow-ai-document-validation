@@ -23,8 +23,8 @@ async def readyz():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception as exc:
-        checks["database"] = f"error: {exc}"
+    except Exception:
+        checks["database"] = "error"
 
     if settings.worker_enabled:
         try:
@@ -32,8 +32,8 @@ async def readyz():
 
             Redis.from_url(settings.redis_url).ping()
             checks["redis"] = "ok"
-        except Exception as exc:
-            checks["redis"] = f"error: {exc}"
+        except Exception:
+            checks["redis"] = "error"
 
     ready = all(value == "ok" for value in checks.values())
     status_code = 200 if ready else 503

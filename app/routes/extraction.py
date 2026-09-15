@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.deps import get_current_user_optional
+from app.deps import get_current_user
 from app.models_db import User
 from app.schemas.extraction import UniversalDocumentExtraction
 from app.services.document_profiler import profile_document
@@ -66,7 +66,7 @@ def _sanitize_ai_analysis_remarks_for_presentation(remarks: str | None) -> str |
 async def extract_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     request_filename = file.filename or "document.pdf"
     logger.info("Received extraction request: filename=%s content_type=%s", request_filename, file.content_type)
@@ -190,11 +190,11 @@ async def extract_document(
                 update_run_failed(db, run, exc.detail if isinstance(exc.detail, str) else "Extraction failed.", preprocessing_meta)
                 db.commit()
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception("Unhandled extraction error.")
         if current_user and run:
             run = db.get(type(run), run.id)
             if run:
-                update_run_failed(db, run, str(exc), preprocessing_meta)
+                update_run_failed(db, run, "Extraction failed.", preprocessing_meta)
                 db.commit()
-        raise HTTPException(status_code=502, detail=f"Extraction pipeline failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Extraction pipeline failed.") from None

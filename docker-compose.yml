@@ -86,7 +86,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
+      - app_data:/app/data
 
   worker:
     build: .
@@ -112,8 +112,9 @@ services:
       S3_SECRET_ACCESS_KEY: minioadmin
       WORKER_ENABLED: "true"
     volumes:
-      - ./data:/app/data
+      - app_data:/app/data
 
 volumes:
   pgdata:
   minio_data:
+  app_data:

@@ -59,6 +59,7 @@ def configure_logging(*, production: bool) -> None:
 class RequestIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = request_id
         token = request_id_ctx.set(request_id)
         trace_id = request.headers.get("X-Trace-ID")
         trace_token = trace_id_ctx.set(trace_id)

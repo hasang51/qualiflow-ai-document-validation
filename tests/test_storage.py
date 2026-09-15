@@ -47,7 +47,6 @@ def test_s3_storage_mocked(monkeypatch):
     monkeypatch.setenv("S3_BUCKET_NAME", "qualiflow")
     reset_settings_cache()
 
-    from app.services.storage.factory import reset_storage_backend_cache
     from app.services.storage.s3 import S3StorageBackend
 
     reset_storage_backend_cache()

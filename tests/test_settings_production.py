@@ -36,7 +36,40 @@ def test_production_rejects_sqlite():
         )
 
 
-def test_local_allows_postgres_defaults():
+def test_production_rejects_debug():
+    with pytest.raises(ValidationError, match="DEBUG"):
+        Settings(
+            app_env="production",
+            jwt_secret_key="x" * 32,
+            cors_allow_origins="https://app.example.com",
+            database_url="postgresql+psycopg2://user:pass@db:5432/qualiflow",
+            debug=True,
+            rate_limit_enabled=True,
+        )
+
+
+def test_production_rejects_disabled_rate_limit():
+    with pytest.raises(ValidationError, match="RATE_LIMIT_ENABLED"):
+        Settings(
+            app_env="production",
+            jwt_secret_key="x" * 32,
+            cors_allow_origins="https://app.example.com",
+            database_url="postgresql+psycopg2://user:pass@db:5432/qualiflow",
+            rate_limit_enabled=False,
+        )
+
+
+def test_production_accepts_secure_config():
+    settings = Settings(
+        app_env="production",
+        jwt_secret_key="x" * 32,
+        cors_allow_origins="https://app.example.com",
+        database_url="postgresql+psycopg2://user:pass@db:5432/qualiflow",
+        debug=False,
+        rate_limit_enabled=True,
+    )
+    assert settings.is_production
+    assert settings.rate_limit_enabled
     settings = Settings(
         app_env="local",
         database_url="postgresql+psycopg2://qualiflow:qualiflow@localhost:5432/qualiflow",

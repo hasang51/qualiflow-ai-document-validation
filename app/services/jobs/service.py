@@ -45,6 +45,13 @@ def get_job(db: Session, job_id: str) -> Job | None:
     return db.get(Job, job_id)
 
 
+def get_owned_job(db: Session, job_id: str, user_id: int) -> Job | None:
+    job = get_job(db, job_id)
+    if job is None or job.user_id != user_id:
+        return None
+    return job
+
+
 def job_status_response(job: Job) -> JobStatusResponse:
     return JobStatusResponse(
         job_id=job.id,

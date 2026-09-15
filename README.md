@@ -206,10 +206,10 @@ docker compose up --build -d       # rebuild after code changes
 Requires PostgreSQL, Redis, and MinIO running locally (or via Docker for infra only):
 
 ```powershell
-pip install -r requirements.txt
+uv sync
 alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-python -m app.workers.run_worker
+uv run uvicorn app.main:app --reload --port 8000
+uv run python -m app.workers.run_worker
 ```
 
 Use `.env` with `localhost` URLs as in `.env.example`.
@@ -219,7 +219,7 @@ Use `.env` with `localhost` URLs as in `.env.example`.
 ## Tests
 
 ```powershell
-python -m pytest tests/ -q
+uv run pytest tests/ -q
 ```
 
 Safety-critical subset (see `AGENTS.md`):

@@ -3,11 +3,14 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1 import api_v1_router
 from app.api.v1.routes.health import router as ops_router
@@ -36,12 +39,21 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    if not settings.is_production:
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        if isinstance(exc, StarletteHTTPException):
+            return await http_exception_handler(request, exc)
+        if isinstance(exc, RequestValidationError):
+            return await request_validation_exception_handler(request, exc)
+        logger.exception("Unhandled error on %s", request.url.path, exc_info=exc)
+        request_id = getattr(request.state, "request_id", None)
+        from app.observability.logging import request_id_ctx
 
-        @app.exception_handler(Exception)
-        async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-            logger.exception("Unhandled error on %s", request.url.path)
-            return JSONResponse(status_code=500, content={"detail": str(exc)})
+        rid = request_id or request_id_ctx.get()
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error.", "request_id": rid},
+        )
 
     app.add_middleware(
         CORSMiddleware,

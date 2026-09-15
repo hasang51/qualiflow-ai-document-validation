@@ -66,6 +66,9 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     anthropic_model: str = Field(default="", description="Anthropic model id; must be set via env for LLM calls")
+    extraction_provider: Literal["anthropic", "mock", "bedrock"] = "anthropic"
+    bedrock_region: str = "eu-central-1"
+    bedrock_model_id: str = ""
 
     pdf_dpi: int = 400
     poppler_path: str = ""
@@ -115,10 +118,14 @@ class Settings(BaseSettings):
         secret = self.jwt_secret_key.strip().lower()
         if secret in _INSECURE_JWT_SECRETS or len(self.jwt_secret_key) < 32:
             errors.append("JWT_SECRET_KEY must be set to a secure value (>=32 chars) in production.")
-        if "*" in self.cors_origins_list:
-            errors.append("CORS_ALLOW_ORIGINS must not include '*' in production.")
+        if not self.cors_origins_list or "*" in self.cors_origins_list:
+            errors.append("CORS_ALLOW_ORIGINS must be an explicit origin list (no '*') in production.")
         if self.database_url.startswith("sqlite"):
             errors.append("DATABASE_URL must use PostgreSQL in production (SQLite is not allowed).")
+        if self.debug:
+            errors.append("DEBUG must be false in production.")
+        if not self.rate_limit_enabled:
+            errors.append("RATE_LIMIT_ENABLED must be true in production.")
         if errors:
             raise ValueError(" ".join(errors))
         return self

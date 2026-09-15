@@ -12,6 +12,7 @@ from app.schemas.extraction import (
 )
 from app.services.document_profiler import DocumentProfile
 from app.services.review_policy import apply_review_policy
+from app.services.traceability import TRACEABILITY_VERIFIED
 from app.services.validator import validate_document
 
 
@@ -133,6 +134,7 @@ class SoftAuditReviewPolicyTests(unittest.TestCase):
             item_id="1",
             heat_number="4533354",
             grade="B 500 B",
+            weight_or_length="12.000 KG",
             mechanical_properties=MechanicalProperties(
                 yield_strength_mpa=588.0,
                 tensile_strength_mpa=691.0,
@@ -141,8 +143,10 @@ class SoftAuditReviewPolicyTests(unittest.TestCase):
             validation=ValidationResult(is_compliant=True, deviations=[], outcome="COMPLIANT"),
             needs_review=False,
             row_confidence=0.9,
+            traceability_status=TRACEABILITY_VERIFIED,
         )
         extraction = _make_extraction(items=[item], confidence_score=0.87)
+        extraction.traceability_status = TRACEABILITY_VERIFIED
         extraction.review_reasons = ["visual ambiguity detected in row"]
         extraction.needs_review = True
 

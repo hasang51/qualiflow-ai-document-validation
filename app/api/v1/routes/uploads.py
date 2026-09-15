@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.deps import get_current_user_optional
+from app.deps import get_current_user
 from app.observability.logging import request_id_ctx, trace_id_ctx
 from app.observability.metrics import record_job_status
 from app.rate_limit import limiter
@@ -29,9 +29,8 @@ async def upload_document(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
-    settings = get_settings()
     content = await file.read()
     validate_pdf_upload(content, file.content_type, file.filename)
 
@@ -45,12 +44,12 @@ async def upload_document(
         db,
         input_object_key=object_key,
         original_filename=file.filename or "document.pdf",
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         trace_id=trace_id,
     )
     record_job_status("queued")
     enqueue_job(job.id)
-    logger.info("Queued job %s object_key=%s user_id=%s", job.id, object_key, current_user.id if current_user else None)
+    logger.info("Queued job %s object_key=%s user_id=%s", job.id, object_key, current_user.id)
 
     response = job_create_response(job)
     return JSONResponse(

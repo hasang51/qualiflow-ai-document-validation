@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from config.settings import reset_settings_cache
 
 
-def test_rate_limit_can_be_disabled(client: TestClient, minimal_pdf_bytes: bytes):
+def test_rate_limit_can_be_disabled(client: TestClient, auth_headers: dict[str, str], minimal_pdf_bytes: bytes):
     from unittest.mock import patch
 
     with patch("app.api.v1.routes.uploads.enqueue_job", return_value=None):
@@ -15,6 +15,7 @@ def test_rate_limit_can_be_disabled(client: TestClient, minimal_pdf_bytes: bytes
             response = client.post(
                 "/api/v1/uploads",
                 files={"file": ("sample.pdf", minimal_pdf_bytes, "application/pdf")},
+                headers=auth_headers,
             )
             assert response.status_code == 202
 

@@ -4,10 +4,10 @@ import json
 import logging
 from typing import Any
 
-import anthropic
 from fastapi import HTTPException
 
 from app.config import settings
+from app.services.extraction_providers.base import ExtractionProviderError
 from app.domain.document_context import build_document_context, propagate_context_to_rows
 from app.domain.field_mapping_registry import CANONICAL_FIELDS, explain_mapping, get_registry_snapshot, resolve_canonical_field
 from app.domain.header_propagation import apply_updates, propagate_to_rows
@@ -298,12 +298,6 @@ def _build_diagnostic_summary(
     }
 
 
-def _anthropic_client() -> anthropic.Anthropic:
-    from app.services.anthropic_client import get_anthropic_client
-
-    return get_anthropic_client()
-
-
 def _image_block(image: EncodedVariant) -> dict[str, Any]:
     return {
         "type": "image",
@@ -393,56 +387,33 @@ def _extract_usage(response: Any) -> dict[str, int]:
 
 
 def _run_metadata_extraction(
-    client: anthropic.Anthropic,
+    client: Any,
     pages: list[ProcessedPage],
 ) -> tuple[dict[str, Any], dict[str, int]]:
-    """Returns ``(metadata_dict, usage_dict)``."""
-    metadata_resp = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=2048,
-        temperature=0.0,
-        system=METADATA_PROMPT,
-        messages=[{"role": "user", "content": _metadata_blocks(pages)}],
-        tools=[METADATA_TOOL],
-        tool_choice={"type": "tool", "name": "submit_document_metadata"},
-    )
-    return _extract_tool_input(metadata_resp, "submit_document_metadata"), _extract_usage(metadata_resp)
+    """Returns ``(metadata_dict, usage_dict)``. ``client`` is unused; kept for test patch compatibility."""
+    del client
+    from app.services.extraction_providers.factory import get_extraction_provider
+
+    return get_extraction_provider().extract_metadata(pages)
 
 
 def _run_row_extraction(
-    client: anthropic.Anthropic,
+    client: Any,
     pages: list[ProcessedPage],
     metadata: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, int]]:
-    """Returns ``(item_payload_dict, usage_dict)``."""
-    document_type = metadata.get("document_type", "Unknown document")
-    supplier_name = metadata.get("supplier_name", "Unknown supplier")
-    product_category = metadata.get("product_category", "OTHER")
-    row_prompt_context = (
-        f"Document type identified in Stage A: {document_type}. "
-        f"Supplier identified in Stage A: {supplier_name}. "
-        f"Product category identified in Stage A: {product_category}. "
-        "Use that only as context. Do not invent missing line items or unreadable cell values."
-    )
-    blocks = _items_blocks(pages)
-    blocks.append({"type": "text", "text": row_prompt_context})
-    item_resp = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=4096,
-        temperature=0.0,
-        system=ITEM_PROMPT,
-        messages=[{"role": "user", "content": blocks}],
-        tools=[ITEM_TOOL],
-        tool_choice={"type": "tool", "name": "submit_line_items"},
-    )
-    return _extract_tool_input(item_resp, "submit_line_items"), _extract_usage(item_resp)
+    """Returns ``(item_payload_dict, usage_dict)``. ``client`` is unused; kept for test patch compatibility."""
+    del client
+    from app.services.extraction_providers.factory import get_extraction_provider
+
+    return get_extraction_provider().extract_line_items(pages, metadata)
 
 
 def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:
     for block in response.content:
         if block.type == "tool_use" and block.name == tool_name:
             return block.input
-    raise HTTPException(status_code=502, detail=f"LLM response missing tool output: {tool_name}")
+    raise ExtractionProviderError(f"LLM response missing tool output: {tool_name}")
 
 
 def _value_from_canonical_or_alias(payload: dict[str, Any], canonical_field: str) -> Any:
@@ -884,15 +855,17 @@ def run_multi_stage_extraction(
     profile: DocumentProfile | None = None,
     route_decision: RouteDecision | None = None,
 ) -> UniversalDocumentExtraction:
-    client = _anthropic_client()
     try:
-        metadata, usage_a = _run_metadata_extraction(client, pages)
-        item_payload, usage_b = _run_row_extraction(client, pages, metadata)
+        metadata, usage_a = _run_metadata_extraction(None, pages)
+        item_payload, usage_b = _run_row_extraction(None, pages, metadata)
     except HTTPException:
         raise
-    except Exception as exc:
+    except ExtractionProviderError:
         logger.exception("LLM extraction failed.")
-        raise HTTPException(status_code=502, detail=f"Vision extraction failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Vision extraction failed.") from None
+    except Exception:
+        logger.exception("LLM extraction failed.")
+        raise HTTPException(status_code=502, detail="Vision extraction failed.") from None
 
     q_class = profile.quality_class if profile else None
     q_reasons = profile.reasons if profile else []

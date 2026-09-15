@@ -399,7 +399,7 @@ function authHeaders(): Headers {
   return headers
 }
 
-export async function uploadDocument(file: File, auth = false): Promise<JobCreateResponse> {
+export async function uploadDocument(file: File, auth = true): Promise<JobCreateResponse> {
   const formData = new FormData()
   formData.append('file', file)
 
@@ -425,11 +425,11 @@ export async function uploadDocument(file: File, auth = false): Promise<JobCreat
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
-  return requestJson<JobStatusResponse>(`/api/v1/jobs/${jobId}`, { method: 'GET' })
+  return requestJson<JobStatusResponse>(`/api/v1/jobs/${jobId}`, { method: 'GET' }, true)
 }
 
 export async function getJobResult(jobId: string): Promise<JobResultResponse> {
-  return requestJson<JobResultResponse>(`/api/v1/jobs/${jobId}/result`, { method: 'GET' })
+  return requestJson<JobResultResponse>(`/api/v1/jobs/${jobId}/result`, { method: 'GET' }, true)
 }
 
 function isTerminalJobStatus(status: JobStatus): boolean {
@@ -438,7 +438,7 @@ function isTerminalJobStatus(status: JobStatus): boolean {
 
 export async function extractDocumentAsync(
   file: File,
-  auth = false,
+  auth = true,
   onProgress?: (phase: JobProgressPhase) => void,
 ): Promise<ExtractDocumentResult> {
   onProgress?.('uploading')
@@ -479,7 +479,7 @@ export async function extractDocumentAsync(
 }
 
 /** @deprecated Use extractDocumentAsync for the async upload + worker pipeline. */
-export async function extractDocument(file: File, auth = false): Promise<ExtractDocumentResult> {
+export async function extractDocument(file: File, auth = true): Promise<ExtractDocumentResult> {
   return extractDocumentAsync(file, auth)
 }
 

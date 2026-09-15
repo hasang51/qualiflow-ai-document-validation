@@ -1,161 +1,72 @@
 name: CI
 
-
-
 on:
-
   push:
-
   pull_request:
 
-
-
 jobs:
-
   backend:
-
     name: Backend lint and tests
-
     runs-on: ubuntu-latest
-
     env:
-
       APP_ENV: test
-
       WORKER_ENABLED: "false"
-
       RATE_LIMIT_ENABLED: "false"
-
       ANTHROPIC_API_KEY: ""
-
       ANTHROPIC_MODEL: ""
-
       JWT_SECRET_KEY: test-secret-key-with-32-characters-min
-
+      EXTRACTION_PROVIDER: mock
+      OBJECT_STORAGE_BACKEND: local
     steps:
-
       - uses: actions/checkout@v4
 
-
-
-      - name: Set up Python
-
-        uses: actions/setup-python@v5
-
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
+          python-version: "3.12"
+          enable-cache: true
 
-          python-version: "3.11"
+      - name: Sync dependencies
+        run: uv sync --frozen
 
+      - name: Ruff
+        run: uv run ruff check app config db tests
 
+      - name: Pyright
+        run: uv run pyright
 
-      - name: Install dependencies
-
-        run: |
-
-          python -m pip install --upgrade pip
-
-          pip install -r requirements.txt
-
-
-
-      - name: Lint (import compile)
-
-        run: python -m compileall app config db tests
-
-
-
-      - name: Run deterministic safety subset
-
+      - name: Deterministic safety subset
         run: >-
-
-          python -m pytest
-
+          uv run pytest
           tests/test_review_policy.py
-
           tests/test_validator.py
-
           tests/test_extraction_finalizer.py
-
           tests/test_traceability.py
-
           tests/test_field_mapping_registry.py
-
-          -q
-
-
-
-      - name: Run auto-accept safety regression
-
-        run: python -m pytest tests/test_auto_accept_safety_regression.py -q
-
-
-
-      - name: Run async backend tests
-
-        run: >-
-
-          python -m pytest
-
-          tests/test_settings_production.py
-
-          tests/test_async_upload.py
-
-          tests/test_jobs_api.py
-
-          tests/test_worker.py
-
-          tests/test_storage.py
-
-          tests/test_rate_limiting.py
-
-          tests/test_anthropic_lazy.py
-
-          -q
-
-
-
-      - name: Run broader unit tests
-
-        run: >-
-
-          python -m pytest
-
           tests/test_conservative_decision_confidence.py
-
-          tests/test_evaluation_layer.py
-
+          tests/test_auto_accept_safety_regression.py
+          tests/test_unsafe_auto_accept_rate.py
           -q
 
-
+      - name: Full test suite with coverage
+        run: >-
+          uv run pytest tests/
+          --cov=app --cov=config --cov=db
+          --cov-report=term-missing
+          --cov-fail-under=65
 
   frontend:
-
     name: Frontend build
-
     runs-on: ubuntu-latest
-
     defaults:
-
       run:
-
         working-directory: frontend
-
     steps:
-
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
-
         with:
-
           node-version: "20"
-
           cache: npm
-
           cache-dependency-path: frontend/package-lock.json
-
       - run: npm ci
-
       - run: npm run build
-
-
