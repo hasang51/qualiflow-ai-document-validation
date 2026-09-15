@@ -64,8 +64,6 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_region: str = "us-east-1"
 
-    anthropic_api_key: str = ""
-    anthropic_model: str = Field(default="", description="Deprecated; unused on the M2 production path")
     extraction_provider: Literal["mock", "bedrock"] = "mock"
     bedrock_region: str = "eu-central-1"
     bedrock_model_id: str = Field(

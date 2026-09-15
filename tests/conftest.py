@@ -11,8 +11,6 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("WORKER_ENABLED", "false")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-with-32-characters-min")
-os.environ.setdefault("ANTHROPIC_API_KEY", "")
-os.environ.setdefault("ANTHROPIC_MODEL", "")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["OBJECT_STORAGE_BACKEND"] = "local"
 os.environ.setdefault("STORAGE_DIR", "./data/test_storage")

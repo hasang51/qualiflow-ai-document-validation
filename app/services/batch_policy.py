@@ -4,9 +4,8 @@ All token-budget, rate-limit, and page-cap decisions flow through
 :class:`BatchRunPolicy`. Batch scripts read a single policy object rather
 than spreading magic constants across many files.
 
-Default values are set for a **pilot study** phase where the per-minute
-Anthropic token budget is limited and API cost should stay well under
-a few dollars.
+Default values are set for a **pilot study** phase where the Bedrock token
+budget is limited and estimated API cost should stay well under a few dollars.
 
 Usage::
 
@@ -32,14 +31,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-# Approximate cost per 1 000 tokens for claude-sonnet-4 input images.
-# Vision tokens are charged at the same rate as text tokens on Anthropic.
-# Use a conservative estimate so we OVER-estimate spend and stop safely.
-_COST_PER_1K_INPUT_USD = 0.003     # $3 / 1M input tokens (Sonnet pricing)
-_COST_PER_1K_OUTPUT_USD = 0.015    # $15 / 1M output tokens
-# Each 1568×1568 (max) image costs roughly 1600 tokens on Claude 3.x.
-# At 400 DPI and LLM_IMAGE_MAX_EDGE=1600 our images are smaller, typically
-# ~800–1 100 image tokens each.
+# Approximate estimated cost per 1 000 tokens for Gemma 4 26B-A4B in eu-central-1
+# Standard (not billing-grade). Conservative enough to stop a pilot run safely.
+_COST_PER_1K_INPUT_USD = 0.00016   # $0.16 / 1M input tokens
+_COST_PER_1K_OUTPUT_USD = 0.00048  # $0.48 / 1M output tokens
+# Image token estimates vary by Gemma vision tokenization; keep a conservative
+# ~800–1 100 tokens per packed page image.
 _ESTIMATED_TOKENS_PER_IMAGE = 1000
 
 
@@ -50,7 +47,7 @@ class BatchRunPolicy:
     Attributes
     ----------
     max_new_live_docs:
-        Maximum number of documents for which new Anthropic calls are issued in
+        Maximum number of documents for which new Bedrock calls are issued in
         this run. Already-cached per-document JSONs (``--resume``) never count.
     max_pages_per_doc:
         Hard cap on pages sent to the LLM for *any* document. The page

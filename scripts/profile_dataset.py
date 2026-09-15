@@ -1,6 +1,6 @@
 """Run the deterministic document profiler across every discovered PDF.
 
-No Anthropic calls are made here. Input is ``data/manifests/documents_discovery.jsonl``
+No Bedrock calls are made here. Input is ``data/manifests/documents_discovery.jsonl``
 (produced by :mod:`scripts.discover_documents`), output is a set of profile
 manifests suitable for downstream manifest building and gold-candidate
 selection.

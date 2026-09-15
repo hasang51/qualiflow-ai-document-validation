@@ -29,7 +29,7 @@ API (FastAPI, :8000)
         ▼
 Redis queue ──► Worker (RQ)
         │              │
-        │              ├── Claude multimodal extraction
+        │              ├── Bedrock Gemma extraction (or mock in CI)
         │              ├── validation + review policy
         │              └── persist analysis
         ▼
@@ -49,7 +49,7 @@ PostgreSQL (:5432)     MinIO S3 (:9000)
 | Database | PostgreSQL 16 (Alembic migrations) |
 | Object storage | MinIO (S3-compatible) |
 | Frontend | React, TypeScript, Vite, Tailwind |
-| Extraction | Anthropic Claude API |
+| Extraction | Amazon Bedrock Gemma 4 26B-A4B (`eu-central-1`, Mantle) or `MockExtractionProvider` for CI |
 
 ---
 
@@ -59,7 +59,8 @@ PostgreSQL (:5432)     MinIO S3 (:9000)
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed
 - Node.js 20+ (frontend only)
-- Anthropic API key
+- AWS credentials via the default chain (env, shared config, or instance/task role) for live Bedrock
+- IAM permission `bedrock-mantle:CreateInference` (AWS managed policy `AmazonBedrockMantleInferenceAccess`)
 
 ### 1. Environment
 
@@ -67,12 +68,17 @@ PostgreSQL (:5432)     MinIO S3 (:9000)
 copy .env.example .env
 ```
 
-Edit `.env` and set:
+For **live** extraction set:
 
 ```env
-ANTHROPIC_API_KEY=your-key-here
-ANTHROPIC_MODEL=claude-sonnet-4-6
+EXTRACTION_PROVIDER=bedrock
+BEDROCK_REGION=eu-central-1
+BEDROCK_MODEL_ID=google.gemma-4-26b-a4b
 ```
+
+Do not put AWS access keys in `.env`. Use the default AWS credential chain. Local CI/tests use `EXTRACTION_PROVIDER=mock`.
+
+Estimated Gemma 4 26B-A4B Standard rates in `eu-central-1` (not billing-grade): `$0.16` / 1M input tokens and `$0.48` / 1M output tokens. Override with `BEDROCK_INPUT_COST_PER_MILLION` / `BEDROCK_OUTPUT_COST_PER_MILLION`.
 
 ### 2. Start backend services
 
@@ -222,6 +228,13 @@ Use `.env` with `localhost` URLs as in `.env.example`.
 uv run pytest tests/ -q
 ```
 
+Offline by default (`EXTRACTION_PROVIDER=mock`). Optional live Bedrock smoke:
+
+```powershell
+$env:QUALIFLOW_BEDROCK_LIVE=1
+uv run pytest tests/test_bedrock_live.py -m bedrock_live
+```
+
 Safety-critical subset (see `AGENTS.md`):
 
 ```powershell
@@ -252,6 +265,8 @@ QualiFlow follows a conservative review policy:
 - Never auto-accept `severe_scan` documents
 - Never auto-accept missing/unverified traceability identifiers
 - Never auto-accept uncertain table alignment
+- Invalid or unusable model output fails toward review (`extraction_schema_invalid`)
+- The LLM extracts evidence only; it does not make the final conformity decision
 - `auto_accept` requires structured `auto_accept_evidence`
 
 See `AGENTS.md` for agent/developer safety rules.

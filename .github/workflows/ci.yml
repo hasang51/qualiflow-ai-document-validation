@@ -12,8 +12,6 @@ jobs:
       APP_ENV: test
       WORKER_ENABLED: "false"
       RATE_LIMIT_ENABLED: "false"
-      ANTHROPIC_API_KEY: ""
-      ANTHROPIC_MODEL: ""
       JWT_SECRET_KEY: test-secret-key-with-32-characters-min
       EXTRACTION_PROVIDER: mock
       OBJECT_STORAGE_BACKEND: local

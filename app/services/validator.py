@@ -518,7 +518,7 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             row_penalty += 0.16
             review_reasons.append("inconsistent grade/spec combinations")
 
-        # Suspicious duplication: Claude's "fill every column" instinct copies
+        # Suspicious duplication: the model's "fill every column" instinct copies
         # a single source value into both heat_number and item_id when the PDF
         # only has one traceability column.  Identical canonical forms are the
         # clearest signal.

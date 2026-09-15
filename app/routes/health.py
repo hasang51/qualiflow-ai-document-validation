@@ -14,8 +14,8 @@ async def health_check():
         "status": "healthy",
         "service": "QualiFlow Document Extraction API",
         "version": "6.0.0",
-        "model": settings.anthropic_model,
-        "engine": "anthropic",
+        "model": settings.bedrock_model_id,
+        "engine": settings.extraction_provider,
         "known_grades": list(MATERIAL_SPECS.keys()),
         "supported_documents": [
             "Certificate of Analysis",

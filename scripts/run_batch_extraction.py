@@ -16,7 +16,7 @@ Outputs (under ``data/batch_runs/<timestamp>/``):
 Flags:
 - ``--manifest`` / ``--subset`` — which manifest to iterate
 - ``--limit N`` — only process the first N rows (useful for smoke tests)
-- ``--dry-run`` — skip the Anthropic call; only profile + route + preprocess stats
+- ``--dry-run`` — skip the Bedrock call; only profile + route + preprocess stats
 - ``--force-route {native_multimodal, rendered_multimodal, preprocessed_multimodal}``
   — bypass the router (Experiment Modes B and C)
 - ``--mode`` — short alias for the experiment mode (``B``, ``C``, ``D``)
@@ -548,7 +548,7 @@ def run(
         else:
             print(f"    -> ERROR: {summary_row['error']}")
 
-        # Pace requests to stay under Anthropic's per-minute token rate limit.
+        # Pace requests to stay under Bedrock's per-minute token rate limit.
         # Applies to live runs only (not dry-run) and not to the final iteration.
         if inter_doc_sleep_s > 0 and not dry_run and idx < total and summary_row.get("status") == "OK":
             print(f"    (sleeping {inter_doc_sleep_s:.0f}s to stay under rate limit)")
@@ -614,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Alternative subset manifest (e.g. gold_candidates_manifest.jsonl).",
     )
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N rows.")
-    parser.add_argument("--dry-run", action="store_true", help="Skip the Anthropic call; profile + route only.")
+    parser.add_argument("--dry-run", action="store_true", help="Skip the Bedrock call; profile + route only.")
     parser.add_argument(
         "--force-route",
         choices=["native_multimodal", "rendered_multimodal", "preprocessed_multimodal"],
@@ -637,7 +637,7 @@ def main(argv: list[str] | None = None) -> int:
         default=float(os.getenv("QUALIFLOW_BATCH_SLEEP_S", "35.0")),
         help=(
             "Seconds to sleep between documents so the batch stays under "
-            "Anthropic's per-minute token rate limit. Default 35s. Set to 0 "
+            "Bedrock's per-minute token rate limit. Default 35s. Set to 0 "
             "to disable pacing."
         ),
     )

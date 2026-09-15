@@ -148,15 +148,3 @@ def to_openai_image_content(blocks: list[EvidenceBlock], trailing_text: str) -> 
     if trailing_text:
         content.append({"type": "text", "text": trailing_text})
     return content
-
-
-def to_anthropic_image_blocks(blocks: list[EvidenceBlock]) -> list[dict[str, Any]]:
-    packed: list[dict[str, Any]] = []
-    for block in blocks:
-        packed.append(
-            {
-                "type": "image",
-                "source": {"type": "base64", "media_type": block.media_type, "data": block.data},
-            }
-        )
-    return packed

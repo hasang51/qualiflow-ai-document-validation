@@ -380,7 +380,7 @@ def _items_blocks(pages: list[ProcessedPage]) -> list[dict[str, Any]]:
 
 
 def _extract_usage(response: Any) -> dict[str, int]:
-    """Pull token usage from an Anthropic response object safely."""
+    """Pull token usage from a legacy response object safely."""
     usage = getattr(response, "usage", None)
     if usage is None:
         return {"input_tokens": 0, "output_tokens": 0}

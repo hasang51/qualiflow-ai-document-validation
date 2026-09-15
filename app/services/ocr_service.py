@@ -1,7 +1,7 @@
 """Isolated, optional legacy OCR utility.
 
 This module is NOT part of the main extraction runtime. The primary extraction
-path in ``app/services/extraction_pipeline.py`` is Claude multimodal only and
+path in ``app/services/extraction_pipeline.py`` is Bedrock Gemma multimodal and
 does not import anything from this file.
 
 It is kept for offline experimentation via ``scripts/check_ocr_backend.py``

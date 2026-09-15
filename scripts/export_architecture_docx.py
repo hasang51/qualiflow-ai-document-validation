@@ -74,14 +74,14 @@ def build() -> None:
             ["Veri", "data/", "Veritabanı, PDF dosyaları, test ve eval sonuçları"],
         ],
     )
-    add_para(doc, "Dış bağımlılıklar: Anthropic Claude API (belge okuma), Poppler (PDF→görüntü).")
+    add_para(doc, "Dış bağımlılıklar: Amazon Bedrock Gemma (belge okuma), Poppler (PDF→görüntü).")
 
     add_heading(doc, "3. Genel Mimari Şema", 1)
     add_code_block(
         doc,
         "Kullanıcı → frontend (React) → app (FastAPI) → data (SQLite + PDF)\n"
         "                              ↓\n"
-        "                         Claude API",
+        "                         Amazon Bedrock Gemma",
     )
 
     add_heading(doc, "4. Belge İşleme Akışı (7 Adım)", 1)
@@ -89,7 +89,7 @@ def build() -> None:
         "① Profilleme — belge kalitesi (dijital / tarama / bozuk)",
         "② Yönlendirme — tek işleme yolu seçimi",
         "③ Ön işleme — PDF sayfalarını görüntüye çevirme",
-        "④ Çıkarım (Claude) — üst bilgi + tablo satırları",
+        "④ Çıkarım (Gemma) — üst bilgi + tablo satırları",
         "⑤ Normalizasyon — alan adları standart forma",
         "⑥ Doğrulama — grade/spec uyum kontrolü",
         "⑦ Güven + inceleme — otomatik onay veya NEEDS_REVIEW",
@@ -102,7 +102,7 @@ def build() -> None:
         doc,
         ["Bölüm", "Teknoloji", "Görev"],
         [
-            ["Neural", "Claude multimodal", "Belgeyi okur, alanları çıkarır"],
+            ["Neural", "Bedrock Gemma multimodal", "Belgeyi okur, alanları çıkarır"],
             ["Symbolic", "Python kuralları", "Grade/spec kontrolü, review kararı"],
         ],
     )
@@ -133,7 +133,7 @@ def build() -> None:
     for item in [
         "API anahtarları .env dosyasında; Git'e gönderilmez.",
         "Kullanıcı şifreleri bcrypt hash ile veritabanında saklanır.",
-        "Claude API anahtarı yalnızca sunucuda kullanılır.",
+        "Bedrock erişimi IAM varsayılan kimlik zinciri ile sunucuda kullanılır.",
     ]:
         doc.add_paragraph(item, style="List Bullet")
 
