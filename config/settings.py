@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 20
     max_pages_for_llm: int = 8
     llm_image_max_edge: int = 1600
-    llm_image_target_bytes: int = 4_500_000
+    llm_image_target_bytes: int = 900_000
     llm_image_min_edge: int = 900
     llm_jpeg_quality: int = 82
     ocr_backend: str = "pytesseract"

@@ -6,6 +6,12 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.services.evidence import (
+    pack_evidence,
+    select_metadata_evidence,
+    select_row_evidence,
+    to_openai_image_content,
+)
 from app.services.extraction_providers.base import (
     ExtractionOutputError,
     ExtractionProviderError,
@@ -21,6 +27,7 @@ from app.services.extraction_providers.output_schemas import (
 from app.services.preprocessing import ProcessedPage
 from config.settings import get_settings
 
+_PROMPT_OVERHEAD_BYTES = 80_000
 _STAGE_A_MAX_TOKENS = 2048
 _STAGE_B_MAX_TOKENS = 4096
 
@@ -31,10 +38,16 @@ class BedrockGemmaProvider:
     name = "bedrock"
 
     def extract_metadata(self, pages: list[ProcessedPage]) -> tuple[PayloadDict, UsageDict]:
-        from app.services.extraction_pipeline import METADATA_PROMPT, _metadata_blocks
+        from app.services.extraction_pipeline import METADATA_PROMPT
 
         self._ensure_configured()
-        content = _anthropic_blocks_to_openai(_metadata_blocks(pages))
+        settings = get_settings()
+        packed = pack_evidence(
+            select_metadata_evidence(pages),
+            max_request_bytes=settings.bedrock_max_request_bytes,
+            prompt_overhead_bytes=_PROMPT_OVERHEAD_BYTES,
+        )
+        content = to_openai_image_content(packed, "Extract document-level metadata only.")
         payload = self._chat_payload(
             system=METADATA_PROMPT,
             content=content,
@@ -53,9 +66,10 @@ class BedrockGemmaProvider:
         pages: list[ProcessedPage],
         metadata: dict[str, Any],
     ) -> tuple[PayloadDict, UsageDict]:
-        from app.services.extraction_pipeline import ITEM_PROMPT, _items_blocks
+        from app.services.extraction_pipeline import ITEM_PROMPT
 
         self._ensure_configured()
+        settings = get_settings()
         document_type = metadata.get("document_type", "Unknown document")
         supplier_name = metadata.get("supplier_name", "Unknown supplier")
         product_category = metadata.get("product_category", "OTHER")
@@ -65,8 +79,19 @@ class BedrockGemmaProvider:
             f"Product category identified in Stage A: {product_category}. "
             "Use that only as context. Do not invent missing line items or unreadable cell values."
         )
-        content = _anthropic_blocks_to_openai(_items_blocks(pages))
-        content.append({"type": "text", "text": row_prompt_context})
+        packed = pack_evidence(
+            select_row_evidence(pages),
+            max_request_bytes=settings.bedrock_max_request_bytes,
+            prompt_overhead_bytes=_PROMPT_OVERHEAD_BYTES,
+        )
+        content = to_openai_image_content(
+            packed,
+            "Step 1: Fill extraction_audit — list every column header you can physically see "
+            "in the table (1-2 sentences). "
+            "Step 2: Extract line items strictly from those visible columns. "
+            "Any field without a corresponding visible column must be null. "
+            f"{row_prompt_context}",
+        )
         payload = self._chat_payload(
             system=ITEM_PROMPT,
             content=content,
@@ -121,25 +146,6 @@ class BedrockGemmaProvider:
             raise ExtractionProviderError(
                 "BEDROCK_MODEL_ID is required when EXTRACTION_PROVIDER=bedrock."
             )
-
-
-def _anthropic_blocks_to_openai(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    content: list[dict[str, Any]] = []
-    for block in blocks:
-        block_type = block.get("type")
-        if block_type == "image":
-            source = block.get("source") or {}
-            media_type = str(source.get("media_type") or "image/jpeg")
-            data = str(source.get("data") or "")
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{media_type};base64,{data}"},
-                }
-            )
-        elif block_type == "text":
-            content.append({"type": "text", "text": str(block.get("text") or "")})
-    return content
 
 
 def _parse_json_content(response: dict[str, Any]) -> PayloadDict:

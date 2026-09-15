@@ -60,6 +60,7 @@ class ExtractedItem(BaseModel):
     identifier_visibility_verified: Optional[bool] = Field(default=None)
     accepted_identifier_values: Dict[str, Any] = Field(default_factory=dict)
     raw_identifier_candidates: Dict[str, Any] = Field(default_factory=dict)
+    source_page: Optional[int] = Field(default=None)
 
 
 class UniversalDocumentExtraction(BaseModel):

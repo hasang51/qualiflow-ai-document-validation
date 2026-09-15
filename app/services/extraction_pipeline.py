@@ -840,6 +840,7 @@ def _build_explanation_payload(
         ],
         "confidence_breakdown": extraction.confidence_breakdown or {},
         "identifier_guard": preprocessing_meta.get("identifier_guard"),
+        "evidence": preprocessing_meta.get("evidence", []),
     }
 
 
@@ -874,6 +875,7 @@ def _row_dict_to_item(row: dict[str, Any]) -> ExtractedItem:
         needs_review=row.get("needs_review", False),
         grade_provenance=row.get("grade_provenance") or ("row" if row.get("grade") else None),
         grade_field_label=row.get("grade_field_label"),
+        source_page=row.get("source_page"),
     )
 
 
@@ -884,6 +886,22 @@ def run_multi_stage_extraction(
     route_decision: RouteDecision | None = None,
 ) -> UniversalDocumentExtraction:
     schema_failure = False
+    from app.services.evidence import evidence_index, pack_evidence, select_metadata_evidence, select_row_evidence
+
+    if pages and isinstance(getattr(pages[0], "variants", None), dict):
+        metadata_evidence = pack_evidence(
+            select_metadata_evidence(pages),
+            max_request_bytes=settings.bedrock_max_request_bytes,
+            prompt_overhead_bytes=80_000,
+        )
+        row_evidence = pack_evidence(
+            select_row_evidence(pages),
+            max_request_bytes=settings.bedrock_max_request_bytes,
+            prompt_overhead_bytes=80_000,
+        )
+        preprocessing_meta["evidence"] = evidence_index(row_evidence or metadata_evidence)
+    else:
+        preprocessing_meta.setdefault("evidence", [])
     try:
         metadata, usage_a = _run_metadata_extraction(None, pages)
         item_payload, usage_b = _run_row_extraction(None, pages, metadata)

@@ -12,6 +12,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models_db import User
 from app.schemas.extraction import UniversalDocumentExtraction
+from app.services.document_processor import validate_pdf_upload
 from app.services.document_profiler import profile_document
 from app.services.extraction_pipeline import run_multi_stage_extraction
 from app.services.extraction_router import choose_route
@@ -71,19 +72,8 @@ async def extract_document(
     request_filename = file.filename or "document.pdf"
     logger.info("Received extraction request: filename=%s content_type=%s", request_filename, file.content_type)
 
-    if file.content_type not in ("application/pdf", "application/x-pdf"):
-        raise HTTPException(
-            status_code=415,
-            detail=f"Unsupported file type '{file.content_type}'. Only PDF files are accepted.",
-        )
-    if file.filename and not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=415, detail="Uploaded file must have a .pdf extension.")
-
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded PDF is empty.")
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_mb} MB limit.")
+    validate_pdf_upload(content, file.content_type, file.filename)
 
     file_hash = sha256_bytes(content)
     stored_pdf = persist_pdf(content, file.filename or "document.pdf", file_hash)
