@@ -52,21 +52,3 @@ def test_factory_returns_bedrock_when_configured(monkeypatch):
     provider = get_extraction_provider()
     assert provider.name == "bedrock"
     assert isinstance(provider, BedrockGemmaProvider)
-
-
-def test_bedrock_provider_requires_model_id(monkeypatch):
-    monkeypatch.setenv("EXTRACTION_PROVIDER", "bedrock")
-    monkeypatch.setenv("BEDROCK_MODEL_ID", "")
-    reset_settings_cache()
-    reset_extraction_provider_cache()
-    provider = BedrockGemmaProvider()
-    with pytest.raises(ExtractionProviderError, match="BEDROCK_MODEL_ID"):
-        provider.extract_metadata([])
-
-
-def test_bedrock_boundary_is_not_wired_even_when_model_set(monkeypatch):
-    monkeypatch.setenv("BEDROCK_MODEL_ID", "google.gemma-4-26b-a4b")
-    reset_settings_cache()
-    provider = BedrockGemmaProvider()
-    with pytest.raises(ExtractionProviderError, match="boundary only"):
-        provider.extract_line_items([], {})

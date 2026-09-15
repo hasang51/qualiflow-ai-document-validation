@@ -12,6 +12,10 @@ class ExtractionProviderError(RuntimeError):
     """Raised when a vision extraction backend fails. Callers must not leak ``str(self)`` to API clients."""
 
 
+class ExtractionOutputError(Exception):
+    """Model returned invalid or unusable structured output. Pipeline must fail toward review."""
+
+
 class ExtractionProvider(Protocol):
     """Stage A/B vision extraction only. Domain validation stays in the pipeline."""
 
