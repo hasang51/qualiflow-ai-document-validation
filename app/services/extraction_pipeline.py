@@ -948,14 +948,29 @@ def run_multi_stage_extraction(
 
     # Store token usage for budget tracking and thesis reporting.
     combined_usage = {
-        "stage_a_input_tokens": usage_a["input_tokens"],
-        "stage_a_output_tokens": usage_a["output_tokens"],
-        "stage_b_input_tokens": usage_b["input_tokens"],
-        "stage_b_output_tokens": usage_b["output_tokens"],
-        "total_input_tokens": usage_a["input_tokens"] + usage_b["input_tokens"],
-        "total_output_tokens": usage_a["output_tokens"] + usage_b["output_tokens"],
+        "provider": settings.extraction_provider,
+        "model_id": settings.bedrock_model_id if settings.extraction_provider == "bedrock" else "mock",
+        "region": settings.bedrock_region,
+        "stage_a_input_tokens": int(usage_a.get("input_tokens", 0) or 0),
+        "stage_a_output_tokens": int(usage_a.get("output_tokens", 0) or 0),
+        "stage_b_input_tokens": int(usage_b.get("input_tokens", 0) or 0),
+        "stage_b_output_tokens": int(usage_b.get("output_tokens", 0) or 0),
+        "total_input_tokens": int(usage_a.get("input_tokens", 0) or 0) + int(usage_b.get("input_tokens", 0) or 0),
+        "total_output_tokens": int(usage_a.get("output_tokens", 0) or 0) + int(usage_b.get("output_tokens", 0) or 0),
+        "latency_ms": int(usage_a.get("latency_ms", 0) or 0) + int(usage_b.get("latency_ms", 0) or 0),
         "pages_sent": len(pages),
+        "schema_failure": schema_failure,
+        "estimated_cost_usd": 0.0,
+        "cost_is_estimate": True,
     }
+    total_in = combined_usage["total_input_tokens"]
+    total_out = combined_usage["total_output_tokens"]
+    if settings.extraction_provider == "bedrock":
+        combined_usage["estimated_cost_usd"] = round(
+            total_in / 1_000_000 * settings.bedrock_input_cost_per_million
+            + total_out / 1_000_000 * settings.bedrock_output_cost_per_million,
+            6,
+        )
     preprocessing_meta["llm_usage"] = combined_usage
     logger.info("LLM usage: %s", combined_usage)
 

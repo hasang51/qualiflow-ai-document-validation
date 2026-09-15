@@ -171,7 +171,8 @@ def _parse_json_content(response: dict[str, Any]) -> PayloadDict:
 
 
 def _extract_usage(response: dict[str, Any], *, latency_ms: int) -> UsageDict:
-    usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+    raw_usage = response.get("usage")
+    usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
     input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
     output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
     return {

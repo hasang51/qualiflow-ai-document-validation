@@ -46,6 +46,9 @@ package = false
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+markers = [
+    "bedrock_live: optional live Amazon Bedrock Mantle smoke test (set QUALIFLOW_BEDROCK_LIVE=1)",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
