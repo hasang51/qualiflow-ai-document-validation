@@ -24,6 +24,7 @@ from app.services.extraction_providers.output_schemas import (
     StageBLineItems,
     response_format_for_model,
 )
+from app.services.prompt_safety import with_untrusted_preamble
 from app.services.preprocessing import ProcessedPage
 from config.settings import get_settings
 
@@ -49,7 +50,7 @@ class BedrockGemmaProvider:
         )
         content = to_openai_image_content(packed, "Extract document-level metadata only.")
         payload = self._chat_payload(
-            system=METADATA_PROMPT,
+            system=with_untrusted_preamble(METADATA_PROMPT),
             content=content,
             max_tokens=_STAGE_A_MAX_TOKENS,
             response_format=response_format_for_model(StageAMetadata, "submit_document_metadata", strict=True),
@@ -93,7 +94,7 @@ class BedrockGemmaProvider:
             f"{row_prompt_context}",
         )
         payload = self._chat_payload(
-            system=ITEM_PROMPT,
+            system=with_untrusted_preamble(ITEM_PROMPT),
             content=content,
             max_tokens=_STAGE_B_MAX_TOKENS,
             # mechanical_table_rows allows extra keys, so Stage B cannot use strict json_schema.
