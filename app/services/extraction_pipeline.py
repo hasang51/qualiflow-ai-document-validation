@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app.config import settings
-from app.services.extraction_providers.base import ExtractionProviderError
+from app.services.extraction_providers.base import ExtractionOutputError, ExtractionProviderError
 from app.domain.document_context import build_document_context, propagate_context_to_rows
 from app.domain.field_mapping_registry import CANONICAL_FIELDS, explain_mapping, get_registry_snapshot, resolve_canonical_field
 from app.domain.header_propagation import apply_updates, propagate_to_rows
@@ -386,6 +386,28 @@ def _extract_usage(response: Any) -> dict[str, int]:
     }
 
 
+def _validate_stage_a_payload(metadata: dict[str, Any]) -> dict[str, Any]:
+    from pydantic import ValidationError
+
+    from app.services.extraction_providers.output_schemas import StageAMetadata
+
+    try:
+        return StageAMetadata.model_validate(metadata).model_dump()
+    except ValidationError as exc:
+        raise ExtractionOutputError("Stage A metadata failed schema validation.") from exc
+
+
+def _validate_stage_b_payload(item_payload: dict[str, Any]) -> dict[str, Any]:
+    from pydantic import ValidationError
+
+    from app.services.extraction_providers.output_schemas import StageBLineItems
+
+    try:
+        return StageBLineItems.model_validate(item_payload).model_dump()
+    except ValidationError as exc:
+        raise ExtractionOutputError("Stage B line items failed schema validation.") from exc
+
+
 def _run_metadata_extraction(
     client: Any,
     pages: list[ProcessedPage],
@@ -394,7 +416,8 @@ def _run_metadata_extraction(
     del client
     from app.services.extraction_providers.factory import get_extraction_provider
 
-    return get_extraction_provider().extract_metadata(pages)
+    metadata, usage = get_extraction_provider().extract_metadata(pages)
+    return _validate_stage_a_payload(metadata), usage
 
 
 def _run_row_extraction(
@@ -406,7 +429,8 @@ def _run_row_extraction(
     del client
     from app.services.extraction_providers.factory import get_extraction_provider
 
-    return get_extraction_provider().extract_line_items(pages, metadata)
+    item_payload, usage = get_extraction_provider().extract_line_items(pages, metadata)
+    return _validate_stage_b_payload(item_payload), usage
 
 
 def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:
