@@ -98,6 +98,19 @@ function parseMechanicalProperties(value: unknown): MechanicalProperties | null 
   }
 }
 
+function parseChemicalComposition(value: unknown): Record<string, number | null> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const source = asObject(value)
+  const composition: Record<string, number | null> = {}
+  for (const [key, raw] of Object.entries(source)) {
+    if (!key.trim()) continue
+    composition[key] = asNumber(raw)
+  }
+  return Object.keys(composition).length > 0 ? composition : null
+}
+
 function normalizeOutcome(value: unknown): ValidationOutcome | null {
   const raw = typeof value === 'string' ? value.toUpperCase() : ''
   const legacyMap: Record<string, ValidationOutcome> = {
@@ -187,8 +200,14 @@ function parseItem(value: unknown): ExtractedItem {
     traceability_identifier_type: asString(source.traceability_identifier_type),
     traceability_identifier_label: asString(source.traceability_identifier_label),
     traceability_identifier_value: asString(source.traceability_identifier_value),
+    product_name: asString(source.product_name),
     grade: asString(source.grade),
     weight_or_length: asString(source.weight_or_length),
+    dimensions: asString(source.dimensions),
+    standards: Array.isArray(source.standards)
+      ? source.standards.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+      : null,
+    chemical_composition: parseChemicalComposition(source.chemical_composition),
     mechanical_properties: parseMechanicalProperties(source.mechanical_properties),
     validation: parseValidation(source.validation),
     row_confidence: asNumber(source.row_confidence),
@@ -198,6 +217,7 @@ function parseItem(value: unknown): ExtractedItem {
     identifier_visibility_verified: asBoolean(source.identifier_visibility_verified),
     accepted_identifier_values: asObject(source.accepted_identifier_values),
     raw_identifier_candidates: asObject(source.raw_identifier_candidates),
+    source_page: asNumber(source.source_page),
   }
 }
 

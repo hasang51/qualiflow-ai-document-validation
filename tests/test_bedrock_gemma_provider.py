@@ -91,6 +91,12 @@ def test_bedrock_line_items_happy_path(monkeypatch):
     def fake_chat(*, region: str, payload: dict) -> dict:
         del region
         assert payload["response_format"]["json_schema"]["strict"] is False
+        user_content = payload["messages"][1]["content"]
+        trailing = next(block["text"] for block in user_content if block.get("type") == "text")
+        assert "full-page" in trailing
+        assert "repeating product-row table is not required" in trailing
+        schema = payload["response_format"]["json_schema"]["schema"]
+        assert "chemical_table_rows" in schema["properties"]
         return _completion({"total_items_detected": 0, "items": []})
 
     monkeypatch.setattr(

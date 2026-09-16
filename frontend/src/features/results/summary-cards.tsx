@@ -63,6 +63,10 @@ export function SummaryCards({ data, variant = 'default' }: SummaryCardsProps) {
 
       { label: 'Certificate Date', value: formatNullable(data.certificate_date) },
 
+      { label: 'Certificate No', value: formatNullable(data.certificate_number) },
+
+      { label: 'Order / PO', value: formatNullable(data.order_number) },
+
       { label: 'Line Items', value: String(data.total_items_detected) },
 
     ]

@@ -114,24 +114,29 @@ class ExtractionFinalizerFieldTests(unittest.TestCase):
         self.assertNotIn("certificate_date", result.metadata)
         self.assertNotIn("certificate_date:from_label", " ".join(result.tokens))
 
-    def test_grade_enriched_from_product_description(self):
-        metadata = {"product_description": "NOVOFIL SG2/NOVOBRONZE SG2"}
+    def test_product_name_separated_from_short_grade(self):
+        metadata = {"product_description": "WELDWIRE SG2 / BRONZEWIRE SG2"}
         rows = [{"grade": "SG2", "mechanical_properties": {}}]
         result = finalize_extraction_fields(metadata, rows)
-        self.assertEqual(result.rows[0]["grade"], "NOVOFIL SG2/NOVOBRONZE SG2")
-        self.assertIn("grade_enriched:from_product_name", result.tokens)
+        self.assertEqual(result.rows[0]["grade"], "SG2")
+        self.assertEqual(result.rows[0]["product_name"], "WELDWIRE SG2 / BRONZEWIRE SG2")
+        self.assertIn("product_name:from_metadata", result.tokens)
 
-    def test_spec_line_not_used_when_product_material_exists(self):
-        metadata = {"product_description": "NOVOFIL SG2/NOVOBRONZE SG2"}
+    def test_spec_line_not_used_as_grade_when_product_material_exists(self):
+        metadata = {"product_description": "WELDWIRE SG2 / BRONZEWIRE SG2"}
         rows = [{"grade": "SG2", "EN ISO 9606": "EN ISO 9606-A", "mechanical_properties": {}}]
         result = finalize_extraction_fields(metadata, rows)
-        self.assertEqual(result.rows[0]["grade"], "NOVOFIL SG2/NOVOBRONZE SG2")
+        self.assertEqual(result.rows[0]["grade"], "SG2")
+        self.assertEqual(result.rows[0]["product_name"], "WELDWIRE SG2 / BRONZEWIRE SG2")
+        self.assertNotEqual(result.rows[0]["grade"], result.rows[0].get("standards"))
 
-    def test_spec_line_used_only_when_no_product_material(self):
+    def test_spec_line_moves_to_standards_instead_of_overwriting_grade(self):
         metadata = {}
         rows = [{"grade": "304", "Description": "EN ISO 9606-A W 304", "mechanical_properties": {}}]
         result = finalize_extraction_fields(metadata, rows)
-        self.assertEqual(result.rows[0]["grade"], "EN ISO 9606-A W 304")
+        self.assertEqual(result.rows[0]["grade"], "304")
+        self.assertIsNone(result.rows[0].get("product_name"))
+        self.assertIn("EN ISO 9606-A W 304", result.rows[0].get("standards") or [])
 
     def test_item_id_sequential_fallback(self):
         rows = [
@@ -163,7 +168,9 @@ class ExtractionFinalizerFieldTests(unittest.TestCase):
             ]
         }
         finalize_canonical_response(payload)
-        self.assertEqual(payload["items"][0]["grade"], "NOVOFIL SG2 / NOVOBRONZE SG2")
+        self.assertEqual(payload["items"][0]["grade"], "SG2")
+        self.assertEqual(payload["items"][0]["product_name"], "NOVOFIL SG2 / NOVOBRONZE SG2")
+        self.assertEqual(payload["items"][0]["dimensions"], "0.80 mm")
 
     def test_canonical_missing_rate_zero_when_all_auto_accept_fields_present(self):
         payload = _canonical_regression_payload()
@@ -285,7 +292,8 @@ class ExtractionFinalizerDecisionTests(unittest.TestCase):
         finalize_decision_on_result(payload)
 
         self.assertEqual(payload["items"][0]["item_id"], "1")
-        self.assertEqual(payload["items"][0]["grade"], "NOVOFIL SG2 / NOVOBRONZE SG2")
+        self.assertEqual(payload["items"][0]["grade"], "SG2")
+        self.assertEqual(payload["items"][0]["product_name"], "NOVOFIL SG2 / NOVOBRONZE SG2")
         self.assertFalse(payload["needs_review"])
         self.assertFalse(payload["review_required"])
         self.assertEqual(payload["processing_decision"], "auto_accept")

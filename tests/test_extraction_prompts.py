@@ -41,6 +41,22 @@ class ExtractionPromptTraceabilityTests(unittest.TestCase):
         self.assertIn("set needs_review=true for the row", ITEM_PROMPT)
         self.assertIn("RULE 6 — CRITICAL: DO NOT CONTRADICT YOUR OWN AUDIT", ITEM_PROMPT)
 
+    def test_item_prompt_keeps_identity_fields_separate(self):
+        self.assertIn("product_name, grade, standards, and dimensions are independent", ITEM_PROMPT)
+        self.assertIn("Never put a standard or classification string into product_name or grade", ITEM_PROMPT)
+        self.assertIn("Never synthesize a grade from a standard", ITEM_PROMPT)
+
+    def test_metadata_prompt_keeps_identity_fields_separate(self):
+        self.assertIn("product_description is the labeled product/material identity only", METADATA_PROMPT)
+        self.assertIn("Keep document identifiers independent", METADATA_PROMPT)
+
+    def test_item_prompt_allows_single_product_certificate_layout(self):
+        self.assertIn("repeating product-row table is not required", ITEM_PROMPT)
+        self.assertIn("chemical_composition", ITEM_PROMPT)
+        self.assertIn("chemical_table_rows", ITEM_PROMPT)
+        self.assertIn("Do not return items=[] when a single product/material is visibly described", ITEM_PROMPT)
+        self.assertIn("labeled identity fields", ITEM_PROMPT)
+
     def test_identifier_prompts_do_not_reintroduce_best_effort_language(self):
         combined = f"{METADATA_PROMPT} {ITEM_PROMPT}".lower()
         forbidden_phrases = (

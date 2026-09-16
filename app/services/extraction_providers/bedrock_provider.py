@@ -87,17 +87,22 @@ class BedrockGemmaProvider:
         )
         content = to_openai_image_content(
             packed,
-            "Step 1: Fill extraction_audit — list every column header you can physically see "
-            "in the table (1-2 sentences). "
-            "Step 2: Extract line items strictly from those visible columns. "
-            "Any field without a corresponding visible column must be null. "
+            "Use all provided images: full-page evidence for product identity and "
+            "labeled traceability fields; table crops for chemistry and mechanical matrices. "
+            "Step 1: Fill extraction_audit — list visible identity labels and every table "
+            "header (1-2 sentences). A repeating product-row table is not required. "
+            "Step 2: Extract product/material items. One identity block plus chemistry "
+            "and/or mechanical matrices is one item. Put observed chemistry in "
+            "chemical_composition/chemical_table_rows and observed mechanicals in "
+            "mechanical_properties/mechanical_table_rows. "
+            "Any field without a corresponding visible label or column must be null. "
             f"{row_prompt_context}",
         )
         payload = self._chat_payload(
             system=with_untrusted_preamble(ITEM_PROMPT),
             content=content,
             max_tokens=_STAGE_B_MAX_TOKENS,
-            # mechanical_table_rows allows extra keys, so Stage B cannot use strict json_schema.
+            # mechanical/chemical table rows allow extra keys, so Stage B cannot use strict json_schema.
             response_format=response_format_for_model(StageBLineItems, "submit_line_items", strict=False),
         )
         raw, usage = self._invoke(payload)

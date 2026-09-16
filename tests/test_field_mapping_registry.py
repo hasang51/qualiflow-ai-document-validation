@@ -51,7 +51,12 @@ class ResolveCanonicalFieldTests(unittest.TestCase):
     def test_yield_rp02_synonym(self):
         self.assertEqual(resolve_canonical_field("RP 0,2"), "yield_strength_mpa")
 
-    def test_unknown_header_is_none(self):
+    def test_product_and_identifier_headers(self):
+        self.assertEqual(resolve_canonical_field("Product Name"), "product_name")
+        self.assertEqual(resolve_canonical_field("Certificate No"), "certificate_number")
+        self.assertEqual(resolve_canonical_field("Purchase Order"), "order_number")
+        self.assertEqual(resolve_canonical_field("Nominal Diameter"), "dimensions")
+        self.assertEqual(resolve_canonical_field("Classification"), "standards")
         self.assertIsNone(resolve_canonical_field("NOT A FIELD"))
 
     def test_empty_string_is_none(self):

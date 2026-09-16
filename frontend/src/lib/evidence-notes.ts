@@ -101,9 +101,47 @@ function buildTraceabilityNotes(data: ExtractionResponse): string[] {
   return lines
 }
 
+function buildProductNotes(data: ExtractionResponse): string[] {
+  const lines = data.items
+    .map((item, index) => (item.product_name ? `${itemRef(item, index)}: ${item.product_name}` : null))
+    .filter((line): line is string => line !== null)
+
+  if (lines.length === 0) {
+    return ['Not extracted']
+  }
+
+  return lines
+}
+
 function buildGradeNotes(data: ExtractionResponse): string[] {
   const lines = data.items
     .map((item, index) => (item.grade ? `${itemRef(item, index)}: ${item.grade}` : null))
+    .filter((line): line is string => line !== null)
+
+  if (lines.length === 0) {
+    return ['Not extracted']
+  }
+
+  return lines
+}
+
+function buildStandardsNotes(data: ExtractionResponse): string[] {
+  const lines = data.items
+    .map((item, index) =>
+      item.standards && item.standards.length > 0 ? `${itemRef(item, index)}: ${item.standards.join(', ')}` : null,
+    )
+    .filter((line): line is string => line !== null)
+
+  if (lines.length === 0) {
+    return ['Not extracted']
+  }
+
+  return lines
+}
+
+function buildDimensionNotes(data: ExtractionResponse): string[] {
+  const lines = data.items
+    .map((item, index) => (item.dimensions ? `${itemRef(item, index)}: ${item.dimensions}` : null))
     .filter((line): line is string => line !== null)
 
   if (lines.length === 0) {
@@ -165,7 +203,10 @@ export function buildEvidenceNoteSections(data: ExtractionResponse): EvidenceNot
   return [
     { title: 'Certificate Date', lines: dedupeExactStrings(buildCertificateDateNotes(data)) },
     { title: 'Traceability Identifier', lines: dedupeExactStrings(buildTraceabilityNotes(data)) },
-    { title: 'Product / Grade', lines: dedupeExactStrings(buildGradeNotes(data)) },
+    { title: 'Product', lines: dedupeExactStrings(buildProductNotes(data)) },
+    { title: 'Grade', lines: dedupeExactStrings(buildGradeNotes(data)) },
+    { title: 'Standards', lines: dedupeExactStrings(buildStandardsNotes(data)) },
+    { title: 'Dimensions', lines: dedupeExactStrings(buildDimensionNotes(data)) },
     { title: 'Validation', lines: dedupeExactStrings(buildValidationNotes(data)) },
     { title: 'Decision', lines: dedupeExactStrings(buildDecisionNotes(data)) },
   ]

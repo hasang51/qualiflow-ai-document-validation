@@ -51,8 +51,12 @@ export interface ExtractedItem {
   traceability_identifier_type?: string | null
   traceability_identifier_label?: string | null
   traceability_identifier_value?: string | null
+  product_name?: string | null
   grade: string | null
   weight_or_length: string | null
+  dimensions?: string | null
+  standards?: string[] | null
+  chemical_composition?: Record<string, number | null> | null
   mechanical_properties: MechanicalProperties | null
   validation: ValidationResult | null
   row_confidence?: number | null
@@ -64,6 +68,7 @@ export interface ExtractedItem {
   identifier_visibility_verified?: boolean | null
   accepted_identifier_values?: Record<string, unknown>
   raw_identifier_candidates?: Record<string, unknown>
+  source_page?: number | null
 }
 
 export interface ExtractionResponse {

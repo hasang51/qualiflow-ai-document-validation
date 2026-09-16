@@ -27,6 +27,7 @@ from app.services.document_profiler import DocumentProfile
 from app.services.preprocessing import EncodedVariant, ProcessedPage
 from app.services.review_policy import apply_review_policy
 from app.services.mechanical_table_mapper import apply_mechanical_table_mapping
+from app.services.identity_field_mapper import apply_identity_field_mapping
 from app.services.row_shape_normalizer import (
     backfill_single_item_context,
     collapse_alternative_classification_rows,
@@ -89,6 +90,11 @@ METADATA_TOOL: dict[str, Any] = {
             "order_number": {"type": ["string", "null"]},
             "header_grade": {"type": ["string", "null"]},
             "product_description": {"type": ["string", "null"]},
+            "dimensions": {"type": ["string", "null"]},
+            "standards": {
+                "type": ["array", "null"],
+                "items": {"type": "string"},
+            },
             "weight_or_length": {"type": ["string", "null"]},
             "ai_analysis_remarks": {"type": ["string", "null"]},
             "confidence_score": {"type": "number"},
@@ -108,17 +114,17 @@ METADATA_TOOL: dict[str, Any] = {
 
 ITEM_TOOL: dict[str, Any] = {
     "name": "submit_line_items",
-    "description": "Submit every extracted line item with strict nulls for unknown values.",
+    "description": "Submit every extracted product/material item with strict nulls for unknown values.",
     "input_schema": {
         "type": "object",
         "properties": {
             "extraction_audit": {
                 "type": ["string", "null"],
                 "description": (
-                    "REQUIRED. 1-2 sentences listing every column header you can physically see "
-                    "in the table and its approximate position before extracting rows. "
-                    "Example: 'Columns visible: Heat No (col 1), Grade (col 2), Yield/Tensile/Elongation "
-                    "(cols 3-5). No Item ID column present in this document.'"
+                    "REQUIRED. 1-2 sentences listing visible identity labels and every table header "
+                    "before extracting items. Example: 'Identity: Batch No, Product, Diameter. "
+                    "Chemistry columns C/Si/Mn. Mechanical rows Yield/Tensile/Elongation. "
+                    "No repeating product-row table.'"
                 ),
             },
             "total_items_detected": {"type": "integer"},
@@ -139,6 +145,22 @@ ITEM_TOOL: dict[str, Any] = {
                     "additionalProperties": True,
                 },
             },
+            "chemical_table_rows": {
+                "type": ["array", "null"],
+                "description": (
+                    "When chemical composition is shown as a matrix (element columns or "
+                    "element-per-row), emit one object per visible chemistry row with the "
+                    "element/property label and every visible value column. Use null when "
+                    "no such table is present."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "property": {"type": "string"},
+                    },
+                    "additionalProperties": True,
+                },
+            },
             "items": {
                 "type": "array",
                 "items": {
@@ -149,8 +171,18 @@ ITEM_TOOL: dict[str, Any] = {
                         "batch_number": {"type": ["string", "null"]},
                         "certificate_number": {"type": ["string", "null"]},
                         "order_number": {"type": ["string", "null"]},
+                        "product_name": {"type": ["string", "null"]},
                         "grade": {"type": ["string", "null"]},
                         "weight_or_length": {"type": ["string", "null"]},
+                        "dimensions": {"type": ["string", "null"]},
+                        "standards": {
+                            "type": ["array", "null"],
+                            "items": {"type": "string"},
+                        },
+                        "chemical_composition": {
+                            "type": ["object", "null"],
+                            "additionalProperties": {"type": ["number", "null"]},
+                        },
                         "mechanical_properties": {
                             "type": ["object", "null"],
                             "properties": {
@@ -174,6 +206,7 @@ ITEM_TOOL: dict[str, Any] = {
                                 "elongation_percentage": {"type": "number"}
                             }
                         },
+                        "source_page": {"type": ["integer", "null"]},
                     },
                 },
             },
@@ -197,6 +230,11 @@ METADATA_PROMPT = (
     "Do NOT use PO date, purchase order date, delivery date, analysis timestamp, upload timestamp, or issue metadata as certificate_date. "
     "Set certificate_date only from certificate/test/issue-style document dates when clearly labelled; otherwise leave certificate_date null and rely on labeled_dates. "
     "Heat/batch/cast numbers are often labelled Heat No, Cast No, Batch No, Colata, Lotto, N. Colata, or N. Lotto; return the value only when the entire identifier is directly readable. "
+    "Keep document identifiers independent: certificate_number, order_number, and heat/batch/lot/colata must not copy each other. "
+    "product_description is the labeled product/material identity only. Do not put grade, standards, classification, diameter, certificate, or PO text into product_description. "
+    "header_grade is only the labeled Grade/Quality/Kalite value. Do not copy a standard or classification into header_grade. "
+    "Put diameter/size with its unit in dimensions. Put visible standards/classifications in standards. "
+    "If a labeled identity field is missing or ambiguous, leave it null. "
     "Confidence_score must reflect extraction certainty. Low-confidence fields MUST be null, not guessed. "
     "Provide field_confidence for heat_number, batch_number, certificate_number, and order_number when any candidate is visible. "
     "In ai_analysis_remarks, clearly explain when metadata is suppressed due to unreadable characters."
@@ -213,21 +251,25 @@ ITEM_PROMPT = (
     "compliance fraud. When in doubt, null.\n\n"
     # ── RULE 0 · MANDATORY PRE-EXTRACTION COLUMN AUDIT (Chain of Thought) ───
     "RULE 0 — COLUMN AUDIT (fill extraction_audit FIRST, before any item):\n"
-    "Scan the table header row and write 1-2 sentences in extraction_audit listing "
-    "every column label you can physically see and its approximate position. "
-    "Example: 'Columns visible: Heat No (col 1), Grade (col 2), "
-    "Yield/Tensile/Elongation (cols 3-5). No Item ID column present.' "
-    "If you cannot identify a column for a field, that field must be null in every row. "
-    "This step is not optional — it prevents you from inventing columns.\n\n"
+    "Scan identity labels and every table. Write 1-2 sentences in extraction_audit "
+    "listing visible identity fields and every column label you can physically see. "
+    "Example: 'Identity: Batch No, Product, Diameter. Chemistry: C/Si/Mn. "
+    "Mechanical rows: Yield/Tensile/Elongation. No repeating product-row table.' "
+    "A repeating product-row table is not required. One product/material with an "
+    "identity block plus chemistry and/or mechanical matrices is one item, not zero. "
+    "If you cannot identify a column or labeled field for a value, that field must "
+    "be null. This step is not optional — it prevents you from inventing columns.\n\n"
     # ── RULE 1 · FIELD AUTONOMY ──────────────────────────────────────────────
     "RULE 1 — FIELD AUTONOMY (heat_number ≠ item_id):\n"
-    "heat_number and item_id are independent fields. Each must be populated from "
-    "a separate, distinct column in the table. "
+    "heat_number and item_id are independent fields. "
     "If no column is labelled Item ID, Article No, Pos., Position, or a clear "
     "item-reference label, set item_id to null for every row. "
     "Copying heat_number into item_id is strictly forbidden under any circumstance. "
     "When the document has only one traceability column, exactly one of the two "
-    "fields receives that value; the other is null.\n\n"
+    "fields receives that value; the other is null. "
+    "On a single-product certificate, fully readable labeled identity fields "
+    "(Heat No, Batch No, Colata, Certificate No, Order/PO) may populate the "
+    "single item even when they are not table columns.\n\n"
     # ── RULE 2 · STRICT NULL POLICY ──────────────────────────────────────────
     "RULE 2 — STRICT NULL POLICY:\n"
     "For every identifier field (heat_number, item_id, batch_number, "
@@ -235,7 +277,8 @@ ITEM_PROMPT = (
     "absolute certainty from the pixel content, return null. "
     "Do not complete partial sequences. Do not infer from adjacent rows or "
     "expected format patterns. Do not use the document's header value to fill "
-    "a row cell unless the cell itself is visibly populated. "
+    "a blank cell in a multi-row product table unless that cell itself is "
+    "visibly populated. "
     "Null is an honest answer. A wrong identifier is compliance fraud.\n\n"
     # ── RULE 3 · OCR CHARACTER VIGILANCE ─────────────────────────────────────
     "RULE 3 — OCR CHARACTER VIGILANCE:\n"
@@ -256,19 +299,37 @@ ITEM_PROMPT = (
     "rather than allowing a guessed value to reach auto-acceptance.\n\n"
     # ── RULE 5 · NUMERIC & STRUCTURAL RULES ──────────────────────────────────
     "RULE 5 — NUMERIC AND STRUCTURAL RULES:\n"
-    "Numeric test values (yield, tensile, elongation) may only be extracted when "
-    "the complete number and its decimal separator are clearly visible in the cell. "
+    "Numeric test values (yield, tensile, elongation, chemistry) may only be extracted "
+    "when the complete number and its decimal separator are clearly visible. "
+    "If the certificate describes one product/material (identity block plus chemistry "
+    "and/or mechanical matrices) rather than repeating product rows, emit exactly one "
+    "item that aggregates product identity, traceability, chemistry, mechanicals, "
+    "dimensions, and standards. total_items_detected must match emitted items. "
+    "Do not treat chemistry-element rows or shielding-gas classification rows "
+    "(for example M21 / C1) as separate products. "
     "If mechanical properties appear vertically as separate Yield / Tensile / "
-    "Elongation lines for the same product row, merge them into one item object. "
+    "Elongation lines for the same product, merge them into one item object. "
     "When a Mechanical Properties table lists one property per row with columns such "
     "as Specified, Min, Max, and Results, populate mechanical_table_rows with each "
     "visible property row and all visible column values. Put observed/test values "
     "only under Results/Result/Actual/Observed — never copy Specified/Min/Max into "
     "canonical mechanical_properties. Prefer Rp0.2 over Rp1.0 for yield when both exist. "
+    "When a chemical composition matrix is visible, populate chemical_table_rows and "
+    "put observed element values on the item in chemical_composition. Never copy "
+    "Specified/Min/Max chemistry into chemical_composition. "
+    "FIELD SEPARATION: product_name, grade, standards, and dimensions are independent. "
+    "product_name is the labeled Product/Material identity only. "
+    "grade is the labeled Grade/Quality/Kalite value only. "
+    "Put diameter/size with its unit in dimensions; keep mass/length in weight_or_length. "
+    "Put visible classification/standard labels (EN ISO, AWS, ASTM, ISO, M21, C1) in standards as a list. "
+    "Never put a standard or classification string into product_name or grade. "
+    "Never synthesize a grade from a standard. If product identity is not explicitly labeled, product_name must be null. "
+    "Keep certificate_number, order_number, and heat/batch/lot/colata independent even when they share a header block. "
+    "Set source_page for the item. "
     "If product category is WIRE_ROPE, extract Tensile Strength Class into "
     "tensile_strength_mpa; treat Construction or Core labels as grade. "
     "Do not emit rows for header lines, totals, footers, or implied/blank rows. "
-    "Only emit a row when its physical boundary is visible in the image.\n\n"
+    "Do not return items=[] when a single product/material is visibly described.\n\n"
     # ── RULE 6 · CONTRADICTION PROHIBITION ───────────────────────────────────
     "RULE 6 — CRITICAL: DO NOT CONTRADICT YOUR OWN AUDIT:\n"
     "If in extraction_audit you describe a heat_number (or any identifier) as "
@@ -446,11 +507,15 @@ def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:
 
 def _value_from_canonical_or_alias(payload: dict[str, Any], canonical_field: str) -> Any:
     if canonical_field in payload:
-        return payload.get(canonical_field)
-    for key, value in payload.items():
-        if resolve_canonical_field(str(key)) == canonical_field:
+        value = payload.get(canonical_field)
+        if value not in (None, "", []):
             return value
-    return None
+    for key, value in payload.items():
+        if key == canonical_field:
+            continue
+        if resolve_canonical_field(str(key)) == canonical_field and value not in (None, "", []):
+            return value
+    return payload.get(canonical_field)
 
 
 def _identifier_aliases(field_name: str) -> tuple[str, ...]:
@@ -690,6 +755,45 @@ def _mapping_diagnostics(metadata: dict[str, Any], items_raw: list[dict[str, Any
     }
 
 
+def _normalize_dimensions(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    cleaned = raw.strip()
+    return cleaned or None
+
+
+def _normalize_standards(raw: Any) -> list[str] | None:
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    if not isinstance(raw, list):
+        return None
+    values = [str(item).strip() for item in raw if str(item).strip()]
+    return values or None
+
+
+def _normalize_source_page(raw: Any) -> int | None:
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None
+    return raw if raw >= 1 else None
+
+
+def _normalize_chemical_composition(raw: Any) -> dict[str, float | None] | None:
+    if not isinstance(raw, dict) or not raw:
+        return None
+    from app.services.mechanical_table_mapper import canonicalize_element_symbol, parse_chemistry_value
+
+    composition: dict[str, float | None] = {}
+    for key, value in raw.items():
+        symbol = canonicalize_element_symbol(str(key)) or str(key).strip()
+        if not symbol:
+            continue
+        parsed = parse_chemistry_value(value)
+        if parsed is None:
+            continue
+        composition[symbol] = parsed
+    return composition or None
+
+
 def _normalize_row_dict(
     item_raw: dict[str, Any],
     row_index: int = 0,
@@ -750,13 +854,18 @@ def _normalize_row_dict(
         "traceability_identifier_type": _value_from_canonical_or_alias(item_raw, "traceability_identifier_type"),
         "traceability_identifier_label": _value_from_canonical_or_alias(item_raw, "traceability_identifier_label"),
         "traceability_identifier_value": _value_from_canonical_or_alias(item_raw, "traceability_identifier_value"),
+        "product_name": _normalize_dimensions(_value_from_canonical_or_alias(item_raw, "product_name")),
         "grade": _value_from_canonical_or_alias(item_raw, "grade"),
         "weight_or_length": _value_from_canonical_or_alias(item_raw, "weight_or_length"),
+        "dimensions": _normalize_dimensions(_value_from_canonical_or_alias(item_raw, "dimensions")),
+        "standards": _normalize_standards(_value_from_canonical_or_alias(item_raw, "standards")),
+        "chemical_composition": _normalize_chemical_composition(item_raw.get("chemical_composition")),
         "mechanical_properties": mp_payload,
         "row_confidence": row_conf,
         "_identifier_confidence": _identifier_confidence_map(item_raw, CRITICAL_IDENTIFIER_FIELDS),
         "needs_review": bool(item_raw.get("needs_review"))
                         or bool(suppression_events),
+        "source_page": _normalize_source_page(item_raw.get("source_page")),
     }
     return normalized, suppression_events
 
@@ -868,8 +977,12 @@ def _row_dict_to_item(row: dict[str, Any]) -> ExtractedItem:
         traceability_identifier_type=row.get("traceability_identifier_type"),
         traceability_identifier_label=row.get("traceability_identifier_label"),
         traceability_identifier_value=row.get("traceability_identifier_value"),
+        product_name=row.get("product_name"),
         grade=row.get("grade"),
         weight_or_length=row.get("weight_or_length"),
+        dimensions=row.get("dimensions"),
+        standards=row.get("standards") if isinstance(row.get("standards"), list) else None,
+        chemical_composition=row.get("chemical_composition") if isinstance(row.get("chemical_composition"), dict) else None,
         mechanical_properties=mechanical,
         row_confidence=row.get("row_confidence"),
         needs_review=row.get("needs_review", False),
@@ -1040,6 +1153,20 @@ def run_multi_stage_extraction(
             items_dicts = backfill_after_mechanical.rows
             row_shape_tokens.extend(backfill_after_mechanical.tokens)
             row_shape_traces.append(backfill_after_mechanical.trace)
+    identity_result = apply_identity_field_mapping(items_dicts, metadata=metadata)
+    items_dicts = identity_result.rows
+    if identity_result.tokens or identity_result.traces:
+        row_shape_tokens.extend(identity_result.tokens)
+        row_shape_traces.extend(identity_result.traces)
+        preprocessing_meta["identity_field_mapping"] = {
+            "tokens": identity_result.tokens,
+            "traces": identity_result.traces,
+        }
+    if row_shape_tokens or row_shape_traces:
+        preprocessing_meta["row_shape_normalization"] = {
+            "tokens": row_shape_tokens,
+            "traces": row_shape_traces,
+        }
     if mechanical_table_tokens or mechanical_table_trace:
         preprocessing_meta["mechanical_table_mapping"] = {
             "tokens": mechanical_table_tokens,

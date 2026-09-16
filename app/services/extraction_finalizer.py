@@ -9,6 +9,7 @@ from typing import Any
 from app.domain.field_mapping_registry import normalize_header
 from app.domain.labeled_identifier_extractor import apply_labeled_identifiers
 from app.schemas.extraction import ExtractedItem, UniversalDocumentExtraction
+from app.services.identity_field_mapper import apply_identity_field_mapping
 from app.services.traceability import TRACEABILITY_VERIFIED, apply_traceability_remarks
 
 # Certificate date label priority (normalized header form).
@@ -422,18 +423,19 @@ def finalize_extraction_fields(
     tokens.extend(date_tokens)
     traces.append(date_trace)
 
+    identity = apply_identity_field_mapping(rows, metadata=meta)
+    rows = identity.rows
+    tokens.extend(identity.tokens)
+    traces.extend(identity.traces)
+
     for index, row in enumerate(rows):
-        enriched, enrich_trace = _select_enriched_grade(row, meta)
-        if enriched:
-            row["grade"] = _cleanup_grade_detail_text(enriched)
-            row["grade_provenance"] = "enriched"
-            tokens.append("grade_enriched:from_product_name")
-            traces.append({"step": "grade_enrichment", "row_index": index, **enrich_trace})
-        elif _text(row.get("grade")):
-            cleaned = _cleanup_grade_detail_text(_text(row.get("grade")))
-            if cleaned != _text(row.get("grade")):
-                row["grade"] = cleaned
-                tokens.append("grade_trimmed:detail_suffix")
+        if not _text(row.get("grade")):
+            continue
+        cleaned = _cleanup_grade_detail_text(_text(row.get("grade")))
+        if cleaned != _text(row.get("grade")):
+            row["grade"] = cleaned or None
+            tokens.append("grade_trimmed:detail_suffix")
+            traces.append({"step": "grade_trim", "row_index": index, "selected": cleaned})
 
     rows, assigned_ids = _assign_sequential_item_ids(rows)
     if assigned_ids:
@@ -462,16 +464,14 @@ def finalize_canonical_response(result: dict[str, Any]) -> CanonicalFinalization
             continue
         row = dict(item)
 
-        enriched, enrich_trace = _select_enriched_grade(row, payload)
-        if enriched:
-            row["grade"] = _cleanup_grade_detail_text(enriched)
-            row["grade_provenance"] = "enriched"
-            tokens.append("grade_enriched:from_product_name")
-            traces.append({"step": "grade_enrichment", "row_index": index, **enrich_trace})
-        elif _text(row.get("grade")):
+        identity = apply_identity_field_mapping([row], metadata=payload)
+        row = identity.rows[0] if identity.rows else row
+        tokens.extend(identity.tokens)
+        traces.extend(identity.traces)
+        if _text(row.get("grade")):
             cleaned = _cleanup_grade_detail_text(_text(row.get("grade")))
             if cleaned != _text(row.get("grade")):
-                row["grade"] = cleaned
+                row["grade"] = cleaned or None
                 tokens.append("grade_trimmed:detail_suffix")
 
         existing = _resolve_item_id_from_aliases(row)
@@ -939,8 +939,12 @@ def _hydrate_extraction_items_from_payload(
         item.pipe_id = canon.get("pipe_id")
         item.heat_number = canon.get("heat_number")
         item.batch_number = canon.get("batch_number")
+        item.product_name = canon.get("product_name")
         item.grade = canon.get("grade")
         item.weight_or_length = canon.get("weight_or_length")
+        item.dimensions = canon.get("dimensions")
+        if isinstance(canon.get("standards"), list):
+            item.standards = canon.get("standards")
 
 
 def apply_reconcile_to_extraction(extraction: UniversalDocumentExtraction) -> dict[str, Any]:

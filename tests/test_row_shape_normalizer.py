@@ -110,6 +110,23 @@ class RowShapeNormalizerTests(unittest.TestCase):
         self.assertEqual(result.rows[0]["grade"], "1.4541/321")
         self.assertIn("context_propagation:heat_number_from_metadata", result.tokens)
 
+    def test_backfills_batch_and_certificate_for_single_item(self):
+        result = backfill_single_item_context(
+            [{"mechanical_properties": {"yield_strength_mpa": 470.0}}],
+            metadata={
+                "batch_number": "SYN41001",
+                "certificate_number": "SYN-IC-1001",
+                "order_number": "PO-77001",
+                "field_confidence": {"batch_number": 0.96, "certificate_number": 0.95, "order_number": 0.94},
+            },
+        )
+
+        self.assertEqual(result.rows[0]["batch_number"], "SYN41001")
+        self.assertEqual(result.rows[0]["certificate_number"], "SYN-IC-1001")
+        self.assertEqual(result.rows[0]["order_number"], "PO-77001")
+        self.assertEqual(result.rows[0]["_identifier_confidence"]["batch_number"], 0.96)
+        self.assertIn("context_propagation:batch_number_from_metadata", result.tokens)
+
     def test_collapses_alternative_classification_rows_for_one_product(self):
         rows = [
             {
@@ -149,7 +166,7 @@ class RowShapeNormalizerTests(unittest.TestCase):
         self.assertEqual(result.rows[0]["mechanical_properties"]["yield_strength_mpa"], 470.0)
         self.assertIn("row_shape:alternative_classification_rows_collapsed", result.tokens)
 
-    def test_collapses_classification_labels_from_grade_for_novofil(self):
+    def test_collapses_classification_labels_without_synthesizing_grade(self):
         rows = [
             {
                 "item_id": None,
@@ -179,12 +196,44 @@ class RowShapeNormalizerTests(unittest.TestCase):
 
         result = collapse_alternative_classification_rows(
             rows,
-            metadata={"supplier_name": "NOVOFIL S.p.A.", "heat_number": "410537"},
+            metadata={"heat_number": "410537"},
         )
 
         self.assertEqual(len(result.rows), 1)
-        self.assertEqual(result.rows[0]["grade"], "SG2")
+        self.assertIsNone(result.rows[0]["grade"])
         self.assertEqual(result.rows[0]["heat_number"], "410537")
+        self.assertEqual(result.rows[0]["standards"], ["M21", "C1"])
+
+    def test_collapses_classifications_and_uses_explicit_product_grade(self):
+        rows = [
+            {
+                "item_id": "M21",
+                "heat_number": None,
+                "grade": "M21",
+                "mechanical_properties": {
+                    "yield_strength_mpa": 470.0,
+                    "tensile_strength_mpa": 560.0,
+                    "elongation_percentage": 26.0,
+                },
+            },
+            {
+                "item_id": "C1",
+                "heat_number": None,
+                "grade": "C1",
+                "mechanical_properties": {
+                    "yield_strength_mpa": 440.0,
+                    "tensile_strength_mpa": 530.0,
+                    "elongation_percentage": 26.0,
+                },
+            },
+        ]
+        result = collapse_alternative_classification_rows(
+            rows,
+            metadata={"product_description": "WELDWIRE SG2", "heat_number": "410537"},
+        )
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["grade"], "SG2")
+        self.assertEqual(result.rows[0]["standards"], ["M21", "C1"])
 
 
 if __name__ == "__main__":

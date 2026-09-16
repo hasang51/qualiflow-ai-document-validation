@@ -33,6 +33,8 @@ class StageAMetadata(_ForbidModel):
     order_number: str | None = None
     header_grade: str | None = None
     product_description: str | None = None
+    dimensions: str | None = None
+    standards: list[str] | None = None
     weight_or_length: str | None = None
     ai_analysis_remarks: str | None = None
     confidence_score: float
@@ -62,8 +64,12 @@ class StageBItem(_ForbidModel):
     batch_number: str | None = None
     certificate_number: str | None = None
     order_number: str | None = None
+    product_name: str | None = None
     grade: str | None = None
     weight_or_length: str | None = None
+    dimensions: str | None = None
+    standards: list[str] | None = None
+    chemical_composition: dict[str, float | None] | None = None
     mechanical_properties: StageBMechanicalProperties | None = None
     row_confidence: float | None = None
     needs_review: bool | None = None
@@ -77,6 +83,10 @@ class StageBLineItems(_ForbidModel):
     mechanical_table_rows: list[dict[str, Any]] | None = Field(
         default=None,
         description="Property-per-row mechanical tables; extra keys are allowed.",
+    )
+    chemical_table_rows: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Chemical composition matrix rows; extra keys are allowed.",
     )
     items: list[StageBItem]
 

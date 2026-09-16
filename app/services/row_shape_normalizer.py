@@ -4,6 +4,16 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.domain.grade_registry import resolve_grade
+from app.services.identity_field_mapper import (
+    HEADER_DIMENSION_KEYS,
+    HEADER_GRADE_KEYS,
+    HEADER_PRODUCT_KEYS,
+    extract_dimension_fragment,
+    is_standards_only,
+    looks_like_classification_token,
+)
+
 
 PROPERTY_LABELS: dict[str, tuple[str, ...]] = {
     "yield_strength_mpa": ("yield", "snervamento", "proof"),
@@ -11,8 +21,24 @@ PROPERTY_LABELS: dict[str, tuple[str, ...]] = {
     "elongation_percentage": ("elongation", "allungamento", "a5"),
 }
 HEADER_HEAT_KEYS = ("heat_number", "header_heat_number", "cast_number")
-HEADER_GRADE_KEYS = ("header_grade", "document_grade", "product_grade", "grade")
+HEADER_BATCH_KEYS = ("batch_number", "colata_number", "lot_number")
+HEADER_CERT_KEYS = ("certificate_number",)
+HEADER_ORDER_KEYS = ("order_number",)
 HEADER_WEIGHT_KEYS = ("weight_or_length", "product_weight", "quantity")
+IDENTITY_PRESERVE_KEYS = (
+    "product_name",
+    "grade",
+    "dimensions",
+    "standards",
+    "chemical_composition",
+    "certificate_number",
+    "order_number",
+    "batch_number",
+    "lot_number",
+    "colata_number",
+    "heat_number",
+    "weight_or_length",
+)
 
 
 @dataclass
@@ -85,8 +111,35 @@ def _has_complete_mechanicals(row: dict[str, Any]) -> bool:
 
 
 def _looks_like_classification_id(value: Any) -> bool:
-    text = _text(value).upper()
-    return bool(re.fullmatch(r"[A-Z]\d{1,3}", text))
+    return looks_like_classification_token(value)
+
+
+def _first_present(rows: list[dict[str, Any]], key: str) -> Any:
+    for row in rows:
+        value = row.get(key)
+        if value not in (None, "", []):
+            return value
+    return None
+
+
+def _merge_standard_values(*groups: Any) -> list[str] | None:
+    seen: set[str] = set()
+    merged: list[str] = []
+    for group in groups:
+        values: list[str]
+        if isinstance(group, list):
+            values = [str(item).strip() for item in group if str(item).strip()]
+        elif isinstance(group, str) and group.strip():
+            values = [group.strip()]
+        else:
+            values = []
+        for value in values:
+            key = value.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(value)
+    return merged or None
 
 
 def _classification_label(row: dict[str, Any]) -> str | None:
@@ -99,16 +152,14 @@ def _classification_label(row: dict[str, Any]) -> str | None:
 
 def _grade_hint(metadata: dict[str, Any]) -> str | None:
     explicit = _metadata_value(metadata, HEADER_GRADE_KEYS)
-    if explicit:
+    if explicit and not looks_like_classification_token(explicit) and not is_standards_only(explicit):
         return explicit
-    product = _text(metadata.get("product_description")).upper()
-    if "SG2" in product:
-        return "SG2"
-    supplier = _text(metadata.get("supplier_name")).upper()
-    # NOVOFIL welding-wire certificates can report M21/C1 shielding-gas
-    # classifications as rows while the product grade is SG2.
-    if "NOVOFIL" in supplier:
-        return "SG2"
+    product = _metadata_value(metadata, HEADER_PRODUCT_KEYS)
+    if not product:
+        return None
+    resolution = resolve_grade(product)
+    if resolution.status in {"resolved", "resolved_dual"} and resolution.canonical:
+        return resolution.canonical
     return None
 
 
@@ -167,22 +218,44 @@ def collapse_vertical_mechanical_rows(
 
     selected_group, payload = complete_groups[0]
     product_row = _product_detail_row(rows)
-    heat_number = _metadata_value(metadata, HEADER_HEAT_KEYS)
-    grade = _metadata_value(metadata, HEADER_GRADE_KEYS)
-    weight = _metadata_value(metadata, HEADER_WEIGHT_KEYS)
-    if product_row is not None:
-        heat_number = heat_number or _text(product_row.get("heat_number")) or None
-        grade = grade or _text(product_row.get("grade")) or None
-        weight = weight or _text(product_row.get("weight_or_length")) or None
+    sources = [product_row, *rows] if product_row is not None else list(rows)
+    heat_number = _metadata_value(metadata, HEADER_HEAT_KEYS) or _first_present(sources, "heat_number")
+    grade_hint = _grade_hint(metadata)
+    grade = grade_hint or _first_present(sources, "grade")
+    if grade and (_looks_like_classification_id(grade) or is_standards_only(grade)):
+        grade = grade_hint
+    weight = _metadata_value(metadata, HEADER_WEIGHT_KEYS) or _first_present(sources, "weight_or_length")
+    dimensions = _metadata_value(metadata, HEADER_DIMENSION_KEYS) or _first_present(sources, "dimensions")
+    if not dimensions and weight:
+        dimensions = extract_dimension_fragment(weight)
+    product_name = _metadata_value(metadata, HEADER_PRODUCT_KEYS) or _first_present(sources, "product_name")
+    classification_labels = [label for row in rows if (label := _classification_label(row))]
+    standards = _merge_standard_values(
+        _first_present(sources, "standards"),
+        metadata.get("standards"),
+        classification_labels,
+    )
 
     collapsed = {
         "item_id": None,
         "heat_number": heat_number,
+        "product_name": product_name,
         "grade": grade,
         "weight_or_length": weight,
+        "dimensions": dimensions,
+        "standards": standards,
         "mechanical_properties": payload["mechanical_properties"],
         "row_confidence": _confidence(payload["row_confidences"]),
     }
+    for key in IDENTITY_PRESERVE_KEYS:
+        if collapsed.get(key) not in (None, "", []):
+            continue
+        value = _first_present(sources, key)
+        if key == "grade" and value and (_looks_like_classification_id(value) or is_standards_only(value)):
+            continue
+        if key == "product_name" and value and is_standards_only(value):
+            continue
+        collapsed[key] = value
     # item_id intentionally None: collapsed rows originate from vertically split
     # mechanical-property lines whose ``item_id`` cells are property labels —
     # not raster Item ID traceability columns.
@@ -197,6 +270,8 @@ def collapse_vertical_mechanical_rows(
             "heat_number": heat_number is not None,
             "grade": grade is not None,
             "weight_or_length": weight is not None,
+            "product_name": product_name is not None,
+            "dimensions": dimensions is not None,
         },
     }
     return RowShapeNormalizationResult(
@@ -209,6 +284,21 @@ def collapse_vertical_mechanical_rows(
 def _looks_like_heat_number(value: str) -> bool:
     canonical = re.sub(r"[^A-Z0-9]", "", value.upper())
     return bool(canonical) and any(ch.isdigit() for ch in canonical) and len(canonical) >= 4
+
+
+def _copy_metadata_confidence(row: dict[str, Any], metadata: dict[str, Any], field_name: str) -> None:
+    meta_conf = metadata.get("field_confidence")
+    if not isinstance(meta_conf, dict):
+        return
+    confidence = meta_conf.get(field_name)
+    if not isinstance(confidence, (int, float)):
+        return
+    row_conf = row.get("_identifier_confidence")
+    if not isinstance(row_conf, dict):
+        row_conf = {}
+        row["_identifier_confidence"] = row_conf
+    if row_conf.get(field_name) is None:
+        row_conf[field_name] = float(confidence)
 
 
 def backfill_single_item_context(
@@ -225,11 +315,49 @@ def backfill_single_item_context(
     heat_number = _metadata_value(metadata, HEADER_HEAT_KEYS)
     if not row.get("heat_number") and heat_number and _looks_like_heat_number(heat_number):
         row["heat_number"] = heat_number
+        _copy_metadata_confidence(row, metadata, "heat_number")
         tokens.append("context_propagation:heat_number_from_metadata")
+    batch_number = _metadata_value(metadata, HEADER_BATCH_KEYS)
+    if not row.get("batch_number") and batch_number and _looks_like_heat_number(batch_number):
+        row["batch_number"] = batch_number
+        _copy_metadata_confidence(row, metadata, "batch_number")
+        tokens.append("context_propagation:batch_number_from_metadata")
+    certificate_number = _metadata_value(metadata, HEADER_CERT_KEYS)
+    if not row.get("certificate_number") and certificate_number:
+        row["certificate_number"] = certificate_number
+        _copy_metadata_confidence(row, metadata, "certificate_number")
+        tokens.append("context_propagation:certificate_number_from_metadata")
+    order_number = _metadata_value(metadata, HEADER_ORDER_KEYS)
+    if not row.get("order_number") and order_number:
+        row["order_number"] = order_number
+        _copy_metadata_confidence(row, metadata, "order_number")
+        tokens.append("context_propagation:order_number_from_metadata")
     grade = _metadata_value(metadata, HEADER_GRADE_KEYS)
-    if not row.get("grade") and grade:
+    if (
+        not row.get("grade")
+        and grade
+        and not looks_like_classification_token(grade)
+        and not is_standards_only(grade)
+    ):
         row["grade"] = grade
         tokens.append("context_propagation:grade_from_metadata")
+    product_name = _metadata_value(metadata, HEADER_PRODUCT_KEYS)
+    if not row.get("product_name") and product_name and not is_standards_only(product_name):
+        row["product_name"] = product_name
+        tokens.append("context_propagation:product_name_from_metadata")
+    dimensions = _metadata_value(metadata, HEADER_DIMENSION_KEYS)
+    if not row.get("dimensions") and dimensions:
+        row["dimensions"] = dimensions
+        tokens.append("context_propagation:dimensions_from_metadata")
+    elif not row.get("dimensions") and row.get("weight_or_length"):
+        extracted = extract_dimension_fragment(row.get("weight_or_length"))
+        if extracted:
+            row["dimensions"] = extracted
+            tokens.append("context_propagation:dimensions_from_weight")
+    header_standards = metadata.get("standards")
+    if not row.get("standards") and header_standards:
+        row["standards"] = _merge_standard_values(header_standards)
+        tokens.append("context_propagation:standards_from_metadata")
     weight = _metadata_value(metadata, HEADER_WEIGHT_KEYS)
     if not row.get("weight_or_length") and weight:
         row["weight_or_length"] = weight
@@ -262,17 +390,22 @@ def collapse_alternative_classification_rows(
     if not all(_has_complete_mechanicals(row) and label for row, label in zip(rows, labels)):
         return RowShapeNormalizationResult(rows=rows)
     grade = _grade_hint(metadata)
+    if grade and _looks_like_classification_id(grade):
+        grade = None
     if not grade:
-        grades = {_text(row.get("grade")) for row in rows if _text(row.get("grade"))}
-        if len(grades) != 1:
-            return RowShapeNormalizationResult(rows=rows)
-        grade = next(iter(grades))
-    if _looks_like_classification_id(grade):
-        return RowShapeNormalizationResult(rows=rows)
+        explicit_grades = {
+            _text(row.get("grade"))
+            for row in rows
+            if _text(row.get("grade")) and not _looks_like_classification_id(row.get("grade"))
+        }
+        grade = next(iter(explicit_grades)) if len(explicit_grades) == 1 else None
 
     selected = dict(rows[0])
     selected["item_id"] = None
     selected["grade"] = grade
+    selected["product_name"] = selected.get("product_name") or _metadata_value(metadata, HEADER_PRODUCT_KEYS)
+    selected["dimensions"] = selected.get("dimensions") or _metadata_value(metadata, HEADER_DIMENSION_KEYS)
+    selected["standards"] = _merge_standard_values(selected.get("standards"), labels, metadata.get("standards"))
     heat_number = _metadata_value(metadata, HEADER_HEAT_KEYS) or (next(iter(heat_values)) if heat_values else None)
     if heat_number:
         selected["heat_number"] = heat_number

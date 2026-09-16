@@ -46,8 +46,11 @@ interface RowShape {
   index: number
   heatNo: string | null
   itemId: string | null
+  productName: string | null
   grade: string | null
   weightOrLength: string | null
+  dimensions: string | null
+  standards: string[]
   yieldMpa: number | null
   tensileMpa: number | null
   elongation: number | null
@@ -147,8 +150,11 @@ export function ItemsTable({
           explanation,
           MISSING_VALUE,
         ),
+        productName: item.product_name ?? null,
         grade: item.grade,
         weightOrLength: item.weight_or_length,
+        dimensions: item.dimensions ?? null,
+        standards: item.standards ?? [],
         yieldMpa: item.mechanical_properties?.yield_strength_mpa ?? null,
         tensileMpa: item.mechanical_properties?.tensile_strength_mpa ?? null,
         elongation: item.mechanical_properties?.elongation_percentage ?? null,
@@ -167,6 +173,16 @@ export function ItemsTable({
 
   const showItemIdColumn = useMemo(
     () => rows.some((row) => !isEmptyItemId(row.itemId)),
+    [rows],
+  )
+
+  const showDimensionsColumn = useMemo(
+    () => rows.some((row) => Boolean(row.dimensions && row.dimensions.trim())),
+    [rows],
+  )
+
+  const showProductColumn = useMemo(
+    () => rows.some((row) => Boolean(row.productName && row.productName.trim())),
     [rows],
   )
 
@@ -197,9 +213,18 @@ export function ItemsTable({
             } as ColumnDef<RowShape>,
           ]
         : []),
+      ...(showProductColumn
+        ? [
+            {
+              accessorKey: 'productName',
+              header: 'Product',
+              cell: ({ row }) => formatNullable(row.original.productName),
+            } as ColumnDef<RowShape>,
+          ]
+        : []),
       {
         accessorKey: 'grade',
-        header: 'Product / Grade',
+        header: 'Grade',
         cell: ({ row }) => formatNullable(row.original.grade),
       },
       {
@@ -207,6 +232,15 @@ export function ItemsTable({
         header: SIZE_WEIGHT_COLUMN_HEADER,
         cell: ({ row }) => formatNullable(row.original.weightOrLength),
       },
+      ...(showDimensionsColumn
+        ? [
+            {
+              accessorKey: 'dimensions',
+              header: 'Dimensions',
+              cell: ({ row }) => formatNullable(row.original.dimensions),
+            } as ColumnDef<RowShape>,
+          ]
+        : []),
       {
         accessorKey: 'yieldMpa',
         header: 'Yield',
@@ -259,7 +293,7 @@ export function ItemsTable({
 
       return baseColumns
     },
-    [expandedRows, itemRefColumnHeader, items, reviewReasons, showItemIdColumn],
+    [expandedRows, itemRefColumnHeader, items, reviewReasons, showDimensionsColumn, showItemIdColumn, showProductColumn],
   )
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -292,7 +326,7 @@ export function ItemsTable({
             <Input
               value={globalFilter}
               onChange={(event) => setGlobalFilter(event.target.value)}
-              placeholder="Search traceability ID, source ref, grade..."
+              placeholder="Search traceability ID, source ref, product, grade..."
               className="pl-9"
             />
           </div>
@@ -351,10 +385,53 @@ export function ItemsTable({
                             <span className="mr-2 text-slate-500">Elongation:</span>
                             {formatNumber(row.original.elongation)}
                           </p>
+                          {row.original.productName && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Product:</span>
+                              {row.original.productName}
+                            </p>
+                          )}
+                          <p className="text-slate-300">
+                            <span className="mr-2 text-slate-500">Grade:</span>
+                            {formatNullable(row.original.grade)}
+                          </p>
                           {row.original.outcome && (
                             <p className="text-slate-300">
                               <span className="mr-2 text-slate-500">Validation outcome:</span>
                               {row.original.outcome}
+                            </p>
+                          )}
+                          {items[row.original.index]?.certificate_number && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Certificate:</span>
+                              {items[row.original.index].certificate_number}
+                            </p>
+                          )}
+                          {items[row.original.index]?.order_number && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Order / PO:</span>
+                              {items[row.original.index].order_number}
+                            </p>
+                          )}
+                          {items[row.original.index]?.dimensions && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Dimensions:</span>
+                              {items[row.original.index].dimensions}
+                            </p>
+                          )}
+                          {items[row.original.index]?.standards && items[row.original.index].standards!.length > 0 && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Standards:</span>
+                              {items[row.original.index].standards!.join(', ')}
+                            </p>
+                          )}
+                          {items[row.original.index]?.chemical_composition && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Chemistry:</span>
+                              {Object.entries(items[row.original.index].chemical_composition ?? {})
+                                .filter(([, value]) => value !== null && value !== undefined)
+                                .map(([element, value]) => `${element} ${value}`)
+                                .join(', ') || MISSING_VALUE}
                             </p>
                           )}
                           {row.original.traceabilityStatus && (
