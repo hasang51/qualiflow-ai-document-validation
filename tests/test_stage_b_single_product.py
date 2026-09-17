@@ -224,7 +224,8 @@ def test_aggregated_item_preserves_chemistry_mechanics_and_traceability():
     assert item.product_name == SYNTHETIC_PRODUCT
     assert item.grade == SYNTHETIC_GRADE
     assert item.dimensions == "0.80 mm"
-    assert item.standards == ["EN ISO 14341-A", "M21", "C1"]
+    assert item.standards == ["EN ISO 14341-A"]
+    assert item.classifications == ["M21", "C1"]
     assert item.chemical_composition is not None
     assert item.chemical_composition.get("C") == 0.08
     assert item.mechanical_properties is not None

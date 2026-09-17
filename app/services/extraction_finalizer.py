@@ -9,7 +9,7 @@ from typing import Any
 from app.domain.field_mapping_registry import normalize_header
 from app.domain.labeled_identifier_extractor import apply_labeled_identifiers
 from app.schemas.extraction import ExtractedItem, UniversalDocumentExtraction
-from app.services.identity_field_mapper import apply_identity_field_mapping
+from app.services.identity_field_mapper import apply_identity_field_mapping, promote_unique_header_fields
 from app.services.traceability import TRACEABILITY_VERIFIED, apply_traceability_remarks
 
 # Certificate date label priority (normalized header form).
@@ -135,6 +135,7 @@ _HARD_AUTO_ACCEPT_BLOCKER_PREFIXES: tuple[str, ...] = (
     "critical_identifier_unverified",
     "header_row_conflict:",
     "validation_conflict:",
+    "conflicting_labeled_candidates:",
 )
 
 
@@ -423,10 +424,15 @@ def finalize_extraction_fields(
     tokens.extend(date_tokens)
     traces.append(date_trace)
 
+    labeled_tokens, labeled_traces = apply_labeled_identifiers(meta, rows)
+    tokens.extend(labeled_tokens)
+    traces.extend(labeled_traces)
+
     identity = apply_identity_field_mapping(rows, metadata=meta)
     rows = identity.rows
     tokens.extend(identity.tokens)
     traces.extend(identity.traces)
+    tokens.extend(promote_unique_header_fields(meta, rows))
 
     for index, row in enumerate(rows):
         if not _text(row.get("grade")):
@@ -440,10 +446,6 @@ def finalize_extraction_fields(
     rows, assigned_ids = _assign_sequential_item_ids(rows)
     if assigned_ids:
         tokens.append("item_id_assigned:sequential")
-
-    labeled_tokens, labeled_traces = apply_labeled_identifiers(meta, rows)
-    tokens.extend(labeled_tokens)
-    traces.extend(labeled_traces)
 
     return FinalizationResult(metadata=meta, rows=rows, tokens=tokens, traces=traces)
 
@@ -492,6 +494,7 @@ def finalize_canonical_response(result: dict[str, Any]) -> CanonicalFinalization
     if assigned:
         tokens.append("item_id_assigned:sequential")
 
+    tokens.extend(promote_unique_header_fields(payload, canonical_items))
     payload["items"] = canonical_items
     missing_rate = compute_auto_accept_missing_fields_rate(payload)
     payload["missing_critical_fields_rate"] = missing_rate
@@ -939,12 +942,42 @@ def _hydrate_extraction_items_from_payload(
         item.pipe_id = canon.get("pipe_id")
         item.heat_number = canon.get("heat_number")
         item.batch_number = canon.get("batch_number")
+        item.lot_number = canon.get("lot_number")
+        item.colata_number = canon.get("colata_number")
+        item.cast_number = canon.get("cast_number")
+        item.charge_number = canon.get("charge_number")
+        item.certificate_number = canon.get("certificate_number")
+        item.order_number = canon.get("order_number")
+        item.order_date = canon.get("order_date")
         item.product_name = canon.get("product_name")
+        item.product_details = canon.get("product_details")
         item.grade = canon.get("grade")
         item.weight_or_length = canon.get("weight_or_length")
         item.dimensions = canon.get("dimensions")
         if isinstance(canon.get("standards"), list):
             item.standards = canon.get("standards")
+        if isinstance(canon.get("classifications"), list):
+            item.classifications = canon.get("classifications")
+
+
+def _hydrate_extraction_document_from_payload(
+    extraction: UniversalDocumentExtraction,
+    payload: dict[str, Any],
+) -> None:
+    for field_name in (
+        "batch_number",
+        "lot_number",
+        "colata_number",
+        "cast_number",
+        "charge_number",
+        "certificate_number",
+        "order_number",
+        "order_date",
+    ):
+        current = getattr(extraction, field_name, None)
+        promoted = payload.get(field_name)
+        if current in (None, "") and promoted not in (None, "", []):
+            setattr(extraction, field_name, promoted)
 
 
 def apply_reconcile_to_extraction(extraction: UniversalDocumentExtraction) -> dict[str, Any]:
@@ -953,6 +986,7 @@ def apply_reconcile_to_extraction(extraction: UniversalDocumentExtraction) -> di
         payload["explanation"] = dict(extraction.explanation)
     reconcile_final_document_decision(payload)
     _hydrate_extraction_items_from_payload(extraction, payload)
+    _hydrate_extraction_document_from_payload(extraction, payload)
     _hydrate_extraction_review_from_payload(extraction, payload)
     extraction.is_compliant = payload.get("is_compliant", extraction.is_compliant)
     extraction.ai_analysis_remarks = payload.get("ai_analysis_remarks", extraction.ai_analysis_remarks)
@@ -1022,6 +1056,7 @@ def apply_canonical_finalization_to_extraction(
     payload = extraction.model_dump(mode="python")
     result = finalize_canonical_response(payload)
     _hydrate_extraction_items_from_payload(extraction, payload)
+    _hydrate_extraction_document_from_payload(extraction, payload)
     return result
 
 

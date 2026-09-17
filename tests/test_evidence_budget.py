@@ -44,6 +44,20 @@ def test_pack_evidence_stays_under_budget():
     assert packed[0].role == "table_crop"
 
 
+def test_pack_evidence_keeps_full_page_instead_of_binary():
+    blocks = [
+        EvidenceBlock(1, "table_crop", "image/jpeg", "aa", 800_000, (0, 0, 1, 1), "table_crop"),
+        EvidenceBlock(1, "full", "image/jpeg", "bb", 800_000, None, "full_page"),
+        EvidenceBlock(1, "bin", "image/jpeg", "cc", 800_000, None, "binary"),
+    ]
+    packed = pack_evidence(blocks, max_request_bytes=3_000_000, prompt_overhead_bytes=80_000)
+    roles = [block.role for block in packed]
+    assert "table_crop" in roles
+    assert "full_page" in roles
+    assert "binary" not in roles
+    assert estimate_request_bytes(packed, 80_000) <= 3_000_000
+
+
 def test_metadata_evidence_includes_page_numbers():
     blocks = select_metadata_evidence([_page()])
     assert blocks

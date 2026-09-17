@@ -61,10 +61,13 @@ def build_document_context(
                 "document_type",
                 "certificate_date",
                 "batch_number",
+                "lot_number",
+                "colata_number",
                 "certificate_number",
                 "certificate_no",
                 "order_number",
                 "order_no",
+                "product_description",
             )
             if meta.get(key) is not None
         },

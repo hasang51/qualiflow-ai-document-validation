@@ -29,6 +29,7 @@ from app.domain.spec_registry import (
     get_spec,
     known_spec_grades,
     resolve_spec,
+    resolve_spec_from_standard_classification,
 )
 from app.schemas.extraction import UniversalDocumentExtraction, ValidationResult
 from app.domain.validation_config import (
@@ -142,6 +143,16 @@ def _grade_spec_inconsistent(item_grade: str | None, yield_value: float | None, 
     return False
 
 
+def _resolve_item_spec(item) -> tuple[GradeResolution, SpecResolution]:
+    grade_resolution = resolve_grade(item.grade)
+    spec_resolution = resolve_spec(grade_resolution)
+    if spec_resolution.status == "empty":
+        pair_resolution = resolve_spec_from_standard_classification(item.standards, item.classifications)
+        if pair_resolution.status == "resolved":
+            return grade_resolution, pair_resolution
+    return grade_resolution, spec_resolution
+
+
 def _validate_against_spec(item, spec: MaterialSpec, config) -> tuple[list[str], bool, float, bool]:
     """Run the per-row spec comparison.
 
@@ -238,7 +249,6 @@ def _record_grade_resolution(item, grade_resolution: GradeResolution, spec_resol
 
 def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExtraction:
     review_reasons: list[str] = list(data.review_reasons)
-    suspicious_rows = 0
     heat_pattern = _infer_dominant_heat_pattern(data)
     config = get_validation_config(data.product_category)
 
@@ -248,8 +258,7 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
 
         # Case 1: no mechanical properties -> NOT_APPLICABLE.
         if item.mechanical_properties is None:
-            grade_resolution = resolve_grade(item.grade)
-            spec_resolution = resolve_spec(grade_resolution)
+            grade_resolution, spec_resolution = _resolve_item_spec(item)
             _record_grade_resolution(item, grade_resolution, spec_resolution)
 
             deviations = ["No mechanical properties - validation skipped."]
@@ -276,8 +285,7 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             item.row_confidence = max(0.05, min(item.row_confidence or 1.0, 1.0) - row_penalty)
             continue
 
-        grade_resolution = resolve_grade(item.grade)
-        spec_resolution = resolve_spec(grade_resolution)
+        grade_resolution, spec_resolution = _resolve_item_spec(item)
         _record_grade_resolution(item, grade_resolution, spec_resolution)
 
         if data.product_category == "WIRE_ROPE":
@@ -312,7 +320,6 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             )
             item.row_confidence = max(0.05, min(item.row_confidence or 1.0, 1.0) - row_penalty)
             if row_suspicious:
-                suspicious_rows += 1
                 review_reasons.append("numeric fields are suspicious")
             continue
 
@@ -337,7 +344,6 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             item.needs_review = True
             item.row_confidence = max(0.05, min(item.row_confidence or 1.0, 1.0) - 0.2)
             review_reasons.append("missing_critical_field:grade")
-            suspicious_rows += 1
             continue
 
         if spec_resolution.status == "unknown_grade":
@@ -391,7 +397,6 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             item.needs_review = True
             item.row_confidence = max(0.05, min(item.row_confidence or 1.0, 1.0) - 0.2)
             review_reasons.append(f"unresolved_grade:{grade_resolution.raw or ''}")
-            suspicious_rows += 1
             continue
 
         # Case 3: ambiguous grade -> review-safe outcome.
@@ -416,7 +421,6 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             item.needs_review = True
             item.row_confidence = max(0.05, min(item.row_confidence or 1.0, 1.0) - 0.15)
             review_reasons.append(f"ambiguous_grade:{grade_resolution.raw or ''}")
-            suspicious_rows += 1
             continue
 
         # Case 4: resolved grade but no declared spec -> UNRESOLVED_SPEC.
@@ -579,8 +583,6 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
             rule_evidence=evidence,
         )
         item.row_confidence = max(0.05, min(item.row_confidence or 1.0, 1.0) - row_penalty)
-        if row_suspicious:
-            suspicious_rows += 1
 
     row_outcomes = [item.validation.outcome for item in data.items if item.validation is not None]
     data.outcome = aggregate_document_outcome([entry for entry in row_outcomes if entry])
@@ -590,10 +592,6 @@ def validate_document(data: UniversalDocumentExtraction) -> UniversalDocumentExt
         data.needs_review = True
         review_reasons.append("row_count_inconsistent")
         data.total_items_detected = len(data.items)
-
-    if data.items and suspicious_rows / len(data.items) >= 0.35:
-        data.needs_review = True
-        review_reasons.append("too many rows are suspicious")
 
     # Cross-row confusable heat number check: if any two heat numbers in the
     # document differ only by OCR-confusable character substitutions (e.g.

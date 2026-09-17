@@ -11,10 +11,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qualiflow"]
+      test: ["CMD-SHELL", "pg_isready -U qualiflow -d qualiflow"]
       interval: 5s
       timeout: 5s
       retries: 10
+
 
   redis:
     image: redis:7-alpine
@@ -111,8 +112,13 @@ services:
       S3_ACCESS_KEY_ID: minioadmin
       S3_SECRET_ACCESS_KEY: minioadmin
       WORKER_ENABLED: "true"
+      AWS_PROFILE: qualiflow
     volumes:
       - app_data:/app/data
+      - type: bind
+        source: ${USERPROFILE}/.aws
+        target: /home/qualiflow/.aws
+        read_only: true
 
 volumes:
   pgdata:

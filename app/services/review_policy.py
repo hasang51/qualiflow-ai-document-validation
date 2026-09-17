@@ -141,6 +141,7 @@ AUTO_ACCEPT_BLOCKING_PREFIXES = (
     "validation_conflict:",
     "critical_identifier_unverified",
     "header_row_conflict:",
+    "conflicting_labeled_candidates:",
 )
 TRACEABILITY_IDENTIFIER_GROUP_FIELDS = (
     "heat_number",

@@ -127,6 +127,15 @@ class RowShapeNormalizerTests(unittest.TestCase):
         self.assertEqual(result.rows[0]["_identifier_confidence"]["batch_number"], 0.96)
         self.assertIn("context_propagation:batch_number_from_metadata", result.tokens)
 
+    def test_backfills_colata_without_copying_to_batch(self):
+        result = backfill_single_item_context(
+            [{"mechanical_properties": {"yield_strength_mpa": 470.0}}],
+            metadata={"colata_number": "410537", "lot_number": "LOT-24-01"},
+        )
+        self.assertEqual(result.rows[0]["colata_number"], "410537")
+        self.assertEqual(result.rows[0]["lot_number"], "LOT-24-01")
+        self.assertFalse(result.rows[0].get("batch_number"))
+
     def test_collapses_alternative_classification_rows_for_one_product(self):
         rows = [
             {

@@ -19,6 +19,45 @@ class LabeledIdentifierExtractorTests(unittest.TestCase):
         self.assertEqual(label.upper(), "CAST NO")
         self.assertEqual(value, "9316704")
 
+    def test_extract_certificate_po_and_batch_from_one_header_line(self):
+        matches = {
+            field: value
+            for field, _label, value in extract_labeled_identifiers_from_text(
+                "Certificate No: SYN-IC-1001 PO: PO-77001 Batch: SYN41001"
+            )
+        }
+        self.assertEqual(matches["certificate_number"], "SYN-IC-1001")
+        self.assertEqual(matches["order_number"], "PO-77001")
+        self.assertEqual(matches["batch_number"], "SYN41001")
+
+    def test_splits_po_number_and_date_from_one_label_line(self):
+        matches = {
+            field: value
+            for field, _label, value in extract_labeled_identifiers_from_text("PO: ABC123 / 25/06/2024")
+        }
+        self.assertEqual(matches["order_number"], "ABC123")
+        self.assertEqual(matches["order_date"], "25/06/2024")
+        self.assertNotIn("/", matches["order_number"])
+
+    def test_splits_certificate_number_and_date_from_one_label_line(self):
+        matches = {
+            field: value
+            for field, _label, value in extract_labeled_identifiers_from_text(
+                "Certificate No: SYN-IC-1001 / 19.06.2020"
+            )
+        }
+        self.assertEqual(matches["certificate_number"], "SYN-IC-1001")
+        self.assertEqual(matches["certificate_date"], "19.06.2020")
+
+    def test_extract_multilingual_colata_without_no_suffix(self):
+        matches = extract_labeled_identifiers_from_text("N. Colata 410537")
+        self.assertEqual(matches[0][0], "colata_number")
+        self.assertEqual(matches[0][2], "410537")
+
+    def test_does_not_treat_quality_management_as_grade(self):
+        matches = extract_labeled_identifiers_from_text("Quality Management System")
+        self.assertEqual(matches, [])
+
     def test_apply_to_metadata_preserves_canonical_field(self):
         metadata: dict = {"ai_analysis_remarks": "CAST NO: 9316704"}
         rows: list[dict] = [{}]

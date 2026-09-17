@@ -13,7 +13,9 @@ from app.domain.field_mapping_registry import CANONICAL_FIELDS, explain_mapping,
 from app.domain.header_propagation import apply_updates, propagate_to_rows
 from app.domain.numeric_parser import parse_mechanical_properties
 from app.domain.outcome_taxonomy import NEEDS_REVIEW, aggregate_document_outcome
+from app.domain.review_invariants import apply_review_invariants, review_tokens_from_meta
 from app.schemas.extraction import ExtractedItem, MechanicalProperties, UniversalDocumentExtraction
+from app.services.canonical_reconciler import apply_canonical_reconciliation
 from app.services.extraction_finalizer import (
     apply_canonical_finalization_to_extraction,
     apply_reconcile_to_extraction,
@@ -86,6 +88,8 @@ METADATA_TOOL: dict[str, Any] = {
             },
             "heat_number": {"type": ["string", "null"]},
             "batch_number": {"type": ["string", "null"]},
+            "lot_number": {"type": ["string", "null"]},
+            "colata_number": {"type": ["string", "null"]},
             "certificate_number": {"type": ["string", "null"]},
             "order_number": {"type": ["string", "null"]},
             "header_grade": {"type": ["string", "null"]},
@@ -103,6 +107,8 @@ METADATA_TOOL: dict[str, Any] = {
                 "properties": {
                     "heat_number": {"type": "number"},
                     "batch_number": {"type": "number"},
+                    "lot_number": {"type": "number"},
+                    "colata_number": {"type": "number"},
                     "certificate_number": {"type": "number"},
                     "order_number": {"type": "number"},
                 },
@@ -169,6 +175,8 @@ ITEM_TOOL: dict[str, Any] = {
                         "item_id": {"type": ["string", "null"]},
                         "heat_number": {"type": ["string", "null"]},
                         "batch_number": {"type": ["string", "null"]},
+                        "lot_number": {"type": ["string", "null"]},
+                        "colata_number": {"type": ["string", "null"]},
                         "certificate_number": {"type": ["string", "null"]},
                         "order_number": {"type": ["string", "null"]},
                         "product_name": {"type": ["string", "null"]},
@@ -198,6 +206,8 @@ ITEM_TOOL: dict[str, Any] = {
                             "properties": {
                                 "heat_number": {"type": "number"},
                                 "batch_number": {"type": "number"},
+                                "lot_number": {"type": "number"},
+                                "colata_number": {"type": "number"},
                                 "item_id": {"type": "number"},
                                 "certificate_number": {"type": "number"},
                                 "order_number": {"type": "number"},
@@ -219,6 +229,7 @@ METADATA_PROMPT = (
     "You are Stage A of an industrial document extraction pipeline. "
     "Use full-page document context to extract only document-level metadata. "
     "STRICT IDENTIFIER TRACEABILITY RULE: For heat_number, batch_number, certificate_number, and order_number, every character must be directly readable from the document image. "
+    "The same strict readable-character rule applies to lot_number and colata_number. "
     "If any digit or character is unclear, blurry, cropped, partially visible, or ambiguous, return null for that identifier. "
     "Identifiers must not be inferred from nearby rows, surrounding context, repeated table patterns, expected formats, or other data. "
     "Never complete a partially visible identifier sequence. Do not use pattern completion for identifiers. "
@@ -229,14 +240,16 @@ METADATA_PROMPT = (
     "DATE RULE: Extract every visible date label/value pair into labeled_dates (e.g. label='Certificate Date', value='08/07/2024'). "
     "Do NOT use PO date, purchase order date, delivery date, analysis timestamp, upload timestamp, or issue metadata as certificate_date. "
     "Set certificate_date only from certificate/test/issue-style document dates when clearly labelled; otherwise leave certificate_date null and rely on labeled_dates. "
-    "Heat/batch/cast numbers are often labelled Heat No, Cast No, Batch No, Colata, Lotto, N. Colata, or N. Lotto; return the value only when the entire identifier is directly readable. "
+    "HEADER FIELD AUTONOMY: certificate_number, order_number/PO, heat, batch, lot, colata, product_description, header_grade, standards, and dimensions are independent even when they share one header line. "
+    "Recognize labeled variants such as Cert, Certificate No, Certificato, PO, Order, Ordine, Batch, Heat, Lot, Lotto, Colata, N. Colata, Product, Grade, Diameter. "
     "Keep document identifiers independent: certificate_number, order_number, and heat/batch/lot/colata must not copy each other. "
     "product_description is the labeled product/material identity only. Do not put grade, standards, classification, diameter, certificate, or PO text into product_description. "
+    "Never infer product_description from a standard or classification. Never infer header_grade from the supplier/manufacturer name. "
     "header_grade is only the labeled Grade/Quality/Kalite value. Do not copy a standard or classification into header_grade. "
-    "Put diameter/size with its unit in dimensions. Put visible standards/classifications in standards. "
+    "Put diameter/size with its unit in dimensions. Put visible standards/classifications in standards as separate list values. "
     "If a labeled identity field is missing or ambiguous, leave it null. "
     "Confidence_score must reflect extraction certainty. Low-confidence fields MUST be null, not guessed. "
-    "Provide field_confidence for heat_number, batch_number, certificate_number, and order_number when any candidate is visible. "
+    "Provide field_confidence for heat_number, batch_number, lot_number, colata_number, certificate_number, and order_number when any candidate is visible. "
     "In ai_analysis_remarks, clearly explain when metadata is suppressed due to unreadable characters."
 )
 
@@ -268,12 +281,11 @@ ITEM_PROMPT = (
     "When the document has only one traceability column, exactly one of the two "
     "fields receives that value; the other is null. "
     "On a single-product certificate, fully readable labeled identity fields "
-    "(Heat No, Batch No, Colata, Certificate No, Order/PO) may populate the "
+    "(Heat No, Batch No, Lot, Lotto, Colata, Certificate No, Cert, Order/PO) may populate the "
     "single item even when they are not table columns.\n\n"
     # ── RULE 2 · STRICT NULL POLICY ──────────────────────────────────────────
     "RULE 2 — STRICT NULL POLICY:\n"
-    "For every identifier field (heat_number, item_id, batch_number, "
-    "certificate_number, order_number): if you cannot read EVERY character with "
+    "For every identifier field (heat_number, item_id, batch_number, certificate_number, order_number, lot_number, colata_number): if you cannot read EVERY character with "
     "absolute certainty from the pixel content, return null. "
     "Do not complete partial sequences. Do not infer from adjacent rows or "
     "expected format patterns. Do not use the document's header value to fill "
@@ -318,13 +330,17 @@ ITEM_PROMPT = (
     "put observed element values on the item in chemical_composition. Never copy "
     "Specified/Min/Max chemistry into chemical_composition. "
     "FIELD SEPARATION: product_name, grade, standards, and dimensions are independent. "
+    "certificate_number, order_number, and heat/batch/lot/colata are also independent. "
     "product_name is the labeled Product/Material identity only. "
     "grade is the labeled Grade/Quality/Kalite value only. "
+    "Never infer product_name from a standard or classification. Never infer grade from the supplier/manufacturer name. "
     "Put diameter/size with its unit in dimensions; keep mass/length in weight_or_length. "
-    "Put visible classification/standard labels (EN ISO, AWS, ASTM, ISO, M21, C1) in standards as a list. "
+    "Put visible classification/standard labels (EN ISO, AWS, ASTM, ISO, M21, C1) in standards as a list of separate values. "
     "Never put a standard or classification string into product_name or grade. "
     "Never synthesize a grade from a standard. If product identity is not explicitly labeled, product_name must be null. "
-    "Keep certificate_number, order_number, and heat/batch/lot/colata independent even when they share a header block. "
+    "Keep certificate_number, order_number, and heat/batch/lot/colata independent even when they share a header block or one header line. "
+    "Recognize labeled variants such as Cert, Certificate No, Certificato, PO, Order, Ordine, Batch, Heat, Lot, Lotto, Colata, N. Colata. "
+    "If a labeled identity field is missing or ambiguous, leave it null. "
     "Set source_page for the item. "
     "If product category is WIRE_ROPE, extract Tensile Strength Class into "
     "tensile_strength_mpa; treat Construction or Core labels as grade. "
@@ -527,14 +543,6 @@ def _identifier_aliases(field_name: str) -> tuple[str, ...]:
             "batch n",
             "batch n°",
             "batch",
-            "lot_number",
-            "lot_no",
-            "lot",
-            "lotto",
-            "colata",
-            "colata/batch",
-            "n colata",
-            "n lotto",
         ),
         "lot_number": ("lot_number", "lot_no", "lot", "lotto", "n lotto"),
         "colata_number": ("colata_number", "colata", "colata/batch", "n colata", "colata n°"),
@@ -543,8 +551,25 @@ def _identifier_aliases(field_name: str) -> tuple[str, ...]:
         "coil_number": ("coil_number", "coil_no", "coil"),
         "item_id": ("item_id", "pipe_id", "pipe_coil_id"),
         "pipe_id": ("pipe_id", "item_id", "pipe_coil_id"),
-        "certificate_number": ("certificate_number", "certificate_no", "cert_number", "cert_no"),
-        "order_number": ("order_number", "order_no", "purchase_order", "po_number", "po_no"),
+        "certificate_number": (
+            "certificate_number",
+            "certificate_no",
+            "cert_number",
+            "cert_no",
+            "certificate",
+            "cert",
+            "certificato",
+        ),
+        "order_number": (
+            "order_number",
+            "order_no",
+            "purchase_order",
+            "po_number",
+            "po_no",
+            "po",
+            "order",
+            "ordine",
+        ),
     }
     return aliases.get(field_name, (field_name,))
 
@@ -974,14 +999,17 @@ def _row_dict_to_item(row: dict[str, Any]) -> ExtractedItem:
         coil_number=row.get("coil_number"),
         certificate_number=row.get("certificate_number"),
         order_number=row.get("order_number"),
+        order_date=row.get("order_date"),
         traceability_identifier_type=row.get("traceability_identifier_type"),
         traceability_identifier_label=row.get("traceability_identifier_label"),
         traceability_identifier_value=row.get("traceability_identifier_value"),
         product_name=row.get("product_name"),
+        product_details=row.get("product_details"),
         grade=row.get("grade"),
         weight_or_length=row.get("weight_or_length"),
         dimensions=row.get("dimensions"),
         standards=row.get("standards") if isinstance(row.get("standards"), list) else None,
+        classifications=row.get("classifications") if isinstance(row.get("classifications"), list) else None,
         chemical_composition=row.get("chemical_composition") if isinstance(row.get("chemical_composition"), dict) else None,
         mechanical_properties=mechanical,
         row_confidence=row.get("row_confidence"),
@@ -1193,6 +1221,10 @@ def run_multi_stage_extraction(
     metadata = finalization.metadata
     items_dicts = finalization.rows
     preprocessing_meta["extraction_finalization"] = finalization.to_dict()
+    reconciliation = apply_canonical_reconciliation(metadata, items_dicts)
+    metadata = reconciliation.metadata
+    items_dicts = reconciliation.rows
+    preprocessing_meta["canonical_reconciliation"] = reconciliation.to_dict()
     preprocessing_meta["identifier_confidence"] = {
         "metadata": _identifier_confidence_map(
             metadata,
@@ -1247,6 +1279,7 @@ def run_multi_stage_extraction(
         coil_number=_raw_identifier_value(metadata, "coil_number"),
         certificate_number=metadata.get("certificate_number"),
         order_number=metadata.get("order_number"),
+        order_date=metadata.get("order_date"),
         traceability_identifier_type=metadata.get("traceability_identifier_type"),
         traceability_identifier_label=metadata.get("traceability_identifier_label"),
         traceability_identifier_value=metadata.get("traceability_identifier_value"),
@@ -1266,6 +1299,10 @@ def run_multi_stage_extraction(
 
     if suppression_events:
         extraction.review_reasons.append("critical_identifier_unverified")
+        extraction.needs_review = True
+
+    if reconciliation.review_tokens:
+        extraction.review_reasons.extend(reconciliation.review_tokens)
         extraction.needs_review = True
 
     # Seed review reasons from numeric parser + header propagation before
@@ -1388,4 +1425,9 @@ def run_multi_stage_extraction(
         preprocessing_meta=preprocessing_meta,
     )
     apply_reconcile_to_extraction(extraction)
+    apply_review_invariants(
+        extraction,
+        canonical_review_tokens=review_tokens_from_meta(preprocessing_meta),
+        raw_reported_total_items=raw_reported_total_items,
+    )
     return extraction

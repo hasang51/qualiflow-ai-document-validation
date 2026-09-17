@@ -1,0 +1,10 @@
+field,raw_exact_accuracy,business_normalized_accuracy,delta
+document_type,1.0,1.0,0.0
+elongation_percentage,1.0,1.0,0.0
+grade,1.0,1.0,0.0
+heat_number,1.0,1.0,0.0
+review_reasons,1.0,1.0,0.0
+review_required,1.0,1.0,0.0
+supplier_name,1.0,1.0,0.0
+tensile_strength_mpa,1.0,1.0,0.0
+yield_strength_mpa,1.0,1.0,0.0

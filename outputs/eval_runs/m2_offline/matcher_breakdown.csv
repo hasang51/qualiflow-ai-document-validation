@@ -1,0 +1,7 @@
+matcher_used,count
+critical_identifier_strict_match,2
+grade_alias_match,2
+normalized_exact_match,1
+numeric_tolerance_match,6
+semantic_equivalent_match,12
+supplier_name_fuzzy_match,6

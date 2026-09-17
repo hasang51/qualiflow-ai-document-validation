@@ -209,10 +209,106 @@ def has_deterministic_spec(canonical: str) -> bool:
     return canonical in _CARBON_SPECS
 
 
+def _normalize_pair_part(value: str) -> str:
+    return " ".join(value.upper().split())
+
+
+_CLASSIFICATION_SPECS: dict[tuple[str, str], MaterialSpec] = {}
+
+
+def register_classification_spec(standard: str, classification: str, spec: MaterialSpec) -> None:
+    """Register a supported ``(standard, classification)`` spec pair.
+
+    Production stays empty unless a domain pair is explicitly declared.
+    Tests may inject pairs without inventing a grade.
+    """
+
+    _CLASSIFICATION_SPECS[(_normalize_pair_part(standard), _normalize_pair_part(classification))] = spec
+
+
+def clear_classification_specs() -> None:
+    _CLASSIFICATION_SPECS.clear()
+
+
+def resolve_spec_from_standard_classification(
+    standards: list[str] | None,
+    classifications: list[str] | None,
+    *,
+    registry: dict[tuple[str, str], MaterialSpec] | None = None,
+) -> SpecResolution:
+    """Resolve mechanical thresholds from a supported standard/classification pair."""
+
+    table = registry if registry is not None else _CLASSIFICATION_SPECS
+    if not table:
+        return SpecResolution(
+            status="empty",
+            spec=None,
+            canonical=None,
+            candidates=(),
+            reason="no supported standard/classification pair declared",
+        )
+
+    standard_values = [str(item).strip() for item in (standards or []) if str(item).strip()]
+    classification_values = [str(item).strip() for item in (classifications or []) if str(item).strip()]
+    if not standard_values or not classification_values:
+        return SpecResolution(
+            status="empty",
+            spec=None,
+            canonical=None,
+            candidates=(),
+            reason="missing standard or classification evidence",
+        )
+
+    matches: list[tuple[str, str, MaterialSpec]] = []
+    for standard in standard_values:
+        std_key = _normalize_pair_part(standard)
+        for classification in classification_values:
+            cls_key = _normalize_pair_part(classification)
+            spec = table.get((std_key, cls_key))
+            if spec is not None:
+                matches.append((standard, classification, spec))
+                continue
+            for registered_std, registered_cls in table:
+                if registered_cls == cls_key and (
+                    std_key == registered_std or registered_std in std_key or std_key in registered_std
+                ):
+                    matches.append((standard, classification, table[(registered_std, registered_cls)]))
+                    break
+
+    unique_specs = {item[2].canonical: item[2] for item in matches}
+    if len(unique_specs) == 1:
+        spec = next(iter(unique_specs.values()))
+        return SpecResolution(
+            status="resolved",
+            spec=spec,
+            canonical=spec.canonical,
+            candidates=tuple(unique_specs),
+            reason="standard/classification pair resolved",
+        )
+    if len(unique_specs) > 1:
+        return SpecResolution(
+            status="ambiguous_grade",
+            spec=None,
+            canonical=None,
+            candidates=tuple(unique_specs),
+            reason="multiple standard/classification specs matched",
+        )
+    return SpecResolution(
+        status="empty",
+        spec=None,
+        canonical=None,
+        candidates=(),
+        reason="no supported standard/classification pair declared",
+    )
+
+
 __all__ = [
     "MaterialSpec",
     "SpecResolution",
+    "clear_classification_specs",
+    "register_classification_spec",
     "resolve_spec",
+    "resolve_spec_from_standard_classification",
     "known_spec_grades",
     "get_spec",
     "has_deterministic_spec",

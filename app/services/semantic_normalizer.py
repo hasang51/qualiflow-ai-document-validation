@@ -54,6 +54,13 @@ def _canonicalize_row_keys(row: dict[str, Any]) -> tuple[dict[str, Any], dict[st
         target = resolution.canonical_field or str(key)
         if resolution.canonical_field is None:
             unresolved.append(str(key))
+        existing = canonical.get(target)
+        if (
+            target != str(key)
+            and existing not in (None, "", [])
+            and value not in (None, "", [])
+        ):
+            continue
         canonical[target] = value
     return canonical, resolutions, unresolved
 

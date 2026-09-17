@@ -1,0 +1,72 @@
+{
+  "metadata_path": "data\\gold\\m2\\metadata.csv",
+  "predictions_dir": "data\\gold\\m2\\predictions",
+  "legacy": {
+    "n_documents": 6,
+    "field_accuracy": 1.0,
+    "critical_field_accuracy": 1.0,
+    "document_type_accuracy": 1.0,
+    "processing_decision_accuracy": 1.0,
+    "review_rate": 1.0,
+    "unsafe_auto_accept_rate": 0.0,
+    "missing_required_field_rate": 0.0,
+    "schema_failures": 1,
+    "schema_failure_rate": 0.1667,
+    "average_latency_ms": 13.5,
+    "total_input_tokens": 55,
+    "total_output_tokens": 25,
+    "estimated_cost_usd": 0.0,
+    "raw_exact_accuracy": 1.0,
+    "business_normalized_accuracy": 1.0,
+    "accuracy_delta": 0.0,
+    "harmless_normalization_accepts": 0,
+    "true_mismatches": 0,
+    "review_needed": 0,
+    "critical_identifier_mismatches": 0
+  },
+  "evaluation_layer": {
+    "n_comparisons": 29,
+    "raw_exact_accuracy": 1.0,
+    "business_normalized_accuracy": 1.0,
+    "accuracy_delta": 0.0,
+    "harmless_normalization_accepts": 0,
+    "true_mismatches": 0,
+    "review_needed": 0,
+    "critical_identifier_mismatches": 0,
+    "matcher_used": {
+      "supplier_name_fuzzy_match": 6,
+      "semantic_equivalent_match": 12,
+      "critical_identifier_strict_match": 2,
+      "grade_alias_match": 2,
+      "numeric_tolerance_match": 6,
+      "normalized_exact_match": 1
+    },
+    "per_field_raw_accuracy": {
+      "supplier_name": 1.0,
+      "document_type": 1.0,
+      "heat_number": 1.0,
+      "grade": 1.0,
+      "yield_strength_mpa": 1.0,
+      "tensile_strength_mpa": 1.0,
+      "elongation_percentage": 1.0,
+      "review_required": 1.0,
+      "review_reasons": 1.0
+    },
+    "per_field_business_accuracy": {
+      "supplier_name": 1.0,
+      "document_type": 1.0,
+      "heat_number": 1.0,
+      "grade": 1.0,
+      "yield_strength_mpa": 1.0,
+      "tensile_strength_mpa": 1.0,
+      "elongation_percentage": 1.0,
+      "review_required": 1.0,
+      "review_reasons": 1.0
+    }
+  },
+  "examples": {
+    "raw_fail_business_pass": [],
+    "both_fail": [],
+    "critical_fail": []
+  }
+}

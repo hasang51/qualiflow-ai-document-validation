@@ -17,6 +17,8 @@ class LabeledDate(_ForbidModel):
 class StageAFieldConfidence(_ForbidModel):
     heat_number: float | None = None
     batch_number: float | None = None
+    lot_number: float | None = None
+    colata_number: float | None = None
     certificate_number: float | None = None
     order_number: float | None = None
 
@@ -29,6 +31,8 @@ class StageAMetadata(_ForbidModel):
     labeled_dates: list[LabeledDate] | None = None
     heat_number: str | None = None
     batch_number: str | None = None
+    lot_number: str | None = None
+    colata_number: str | None = None
     certificate_number: str | None = None
     order_number: str | None = None
     header_grade: str | None = None
@@ -50,6 +54,8 @@ class StageBMechanicalProperties(_ForbidModel):
 class StageBFieldConfidence(_ForbidModel):
     heat_number: float | None = None
     batch_number: float | None = None
+    lot_number: float | None = None
+    colata_number: float | None = None
     item_id: float | None = None
     certificate_number: float | None = None
     order_number: float | None = None
@@ -62,6 +68,8 @@ class StageBItem(_ForbidModel):
     item_id: str | None = None
     heat_number: str | None = None
     batch_number: str | None = None
+    lot_number: str | None = None
+    colata_number: str | None = None
     certificate_number: str | None = None
     order_number: str | None = None
     product_name: str | None = None

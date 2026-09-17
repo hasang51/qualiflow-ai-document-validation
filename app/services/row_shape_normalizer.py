@@ -20,8 +20,11 @@ PROPERTY_LABELS: dict[str, tuple[str, ...]] = {
     "tensile_strength_mpa": ("tensile", "carico di rottura", "rm"),
     "elongation_percentage": ("elongation", "allungamento", "a5"),
 }
-HEADER_HEAT_KEYS = ("heat_number", "header_heat_number", "cast_number")
-HEADER_BATCH_KEYS = ("batch_number", "colata_number", "lot_number")
+HEADER_HEAT_KEYS = ("heat_number", "header_heat_number")
+HEADER_BATCH_KEYS = ("batch_number",)
+HEADER_LOT_KEYS = ("lot_number",)
+HEADER_COLATA_KEYS = ("colata_number",)
+HEADER_CAST_KEYS = ("cast_number",)
 HEADER_CERT_KEYS = ("certificate_number",)
 HEADER_ORDER_KEYS = ("order_number",)
 HEADER_WEIGHT_KEYS = ("weight_or_length", "product_weight", "quantity")
@@ -322,6 +325,21 @@ def backfill_single_item_context(
         row["batch_number"] = batch_number
         _copy_metadata_confidence(row, metadata, "batch_number")
         tokens.append("context_propagation:batch_number_from_metadata")
+    lot_number = _metadata_value(metadata, HEADER_LOT_KEYS)
+    if not row.get("lot_number") and lot_number and _looks_like_heat_number(lot_number):
+        row["lot_number"] = lot_number
+        _copy_metadata_confidence(row, metadata, "lot_number")
+        tokens.append("context_propagation:lot_number_from_metadata")
+    colata_number = _metadata_value(metadata, HEADER_COLATA_KEYS)
+    if not row.get("colata_number") and colata_number and _looks_like_heat_number(colata_number):
+        row["colata_number"] = colata_number
+        _copy_metadata_confidence(row, metadata, "colata_number")
+        tokens.append("context_propagation:colata_number_from_metadata")
+    cast_number = _metadata_value(metadata, HEADER_CAST_KEYS)
+    if not row.get("cast_number") and cast_number and _looks_like_heat_number(cast_number):
+        row["cast_number"] = cast_number
+        _copy_metadata_confidence(row, metadata, "cast_number")
+        tokens.append("context_propagation:cast_number_from_metadata")
     certificate_number = _metadata_value(metadata, HEADER_CERT_KEYS)
     if not row.get("certificate_number") and certificate_number:
         row["certificate_number"] = certificate_number
@@ -409,6 +427,21 @@ def collapse_alternative_classification_rows(
     heat_number = _metadata_value(metadata, HEADER_HEAT_KEYS) or (next(iter(heat_values)) if heat_values else None)
     if heat_number:
         selected["heat_number"] = heat_number
+    batch_number = _metadata_value(metadata, HEADER_BATCH_KEYS)
+    if batch_number and not selected.get("batch_number"):
+        selected["batch_number"] = batch_number
+    lot_number = _metadata_value(metadata, HEADER_LOT_KEYS)
+    if lot_number and not selected.get("lot_number"):
+        selected["lot_number"] = lot_number
+    colata_number = _metadata_value(metadata, HEADER_COLATA_KEYS)
+    if colata_number and not selected.get("colata_number"):
+        selected["colata_number"] = colata_number
+    certificate_number = _metadata_value(metadata, HEADER_CERT_KEYS)
+    if certificate_number and not selected.get("certificate_number"):
+        selected["certificate_number"] = certificate_number
+    order_number = _metadata_value(metadata, HEADER_ORDER_KEYS)
+    if order_number and not selected.get("order_number"):
+        selected["order_number"] = order_number
     weight = _metadata_value(metadata, HEADER_WEIGHT_KEYS)
     if weight:
         selected["weight_or_length"] = weight

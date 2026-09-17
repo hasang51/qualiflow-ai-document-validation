@@ -84,6 +84,24 @@ def test_stage_b_accepts_single_product_aggregated_item():
     assert item["standards"] == ["EN ISO 14341-A", "M21"]
 
 
+def test_stage_a_accepts_lot_and_colata_independently():
+    payload = _validate_stage_a_payload(
+        {
+            "supplier_name": "Acme",
+            "document_type": "Mill Test Certificate",
+            "confidence_score": 0.9,
+            "lot_number": "LOT-24-01",
+            "colata_number": "410537",
+            "certificate_number": "SYN-IC-1001",
+            "order_number": "PO-77001",
+        }
+    )
+    assert payload["lot_number"] == "LOT-24-01"
+    assert payload["colata_number"] == "410537"
+    assert payload["certificate_number"] == "SYN-IC-1001"
+    assert payload["order_number"] == "PO-77001"
+
+
 def test_stage_b_rejects_compliance_keys_on_aggregated_item():
     with pytest.raises(ExtractionOutputError, match="Stage B"):
         _validate_stage_b_payload(

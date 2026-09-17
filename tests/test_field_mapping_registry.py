@@ -52,11 +52,22 @@ class ResolveCanonicalFieldTests(unittest.TestCase):
         self.assertEqual(resolve_canonical_field("RP 0,2"), "yield_strength_mpa")
 
     def test_product_and_identifier_headers(self):
-        self.assertEqual(resolve_canonical_field("Product Name"), "product_name")
         self.assertEqual(resolve_canonical_field("Certificate No"), "certificate_number")
+        self.assertEqual(resolve_canonical_field("Cert"), "certificate_number")
         self.assertEqual(resolve_canonical_field("Purchase Order"), "order_number")
+        self.assertEqual(resolve_canonical_field("PO"), "order_number")
+        self.assertEqual(resolve_canonical_field("Order"), "order_number")
+        self.assertEqual(resolve_canonical_field("Colata"), "colata_number")
+        self.assertEqual(resolve_canonical_field("Heat"), "heat_number")
+        self.assertEqual(resolve_canonical_field("Batch"), "batch_number")
+        self.assertEqual(resolve_canonical_field("Prodotto"), "product_name")
+        self.assertEqual(resolve_canonical_field("Qualità"), "grade")
+        self.assertEqual(resolve_canonical_field("Diametro"), "dimensions")
         self.assertEqual(resolve_canonical_field("Nominal Diameter"), "dimensions")
-        self.assertEqual(resolve_canonical_field("Classification"), "standards")
+        self.assertEqual(resolve_canonical_field("Classification"), "classifications")
+        self.assertEqual(resolve_canonical_field("PO DATE"), "order_date")
+        self.assertEqual(resolve_canonical_field("Norma"), "standards")
+        self.assertEqual(resolve_canonical_field("Product Details"), "product_details")
         self.assertIsNone(resolve_canonical_field("NOT A FIELD"))
 
     def test_empty_string_is_none(self):

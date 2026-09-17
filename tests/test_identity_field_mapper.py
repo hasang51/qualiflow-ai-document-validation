@@ -23,7 +23,8 @@ class IdentityFieldMapperTests:
         assert item["product_name"] == "WELDWIRE SG2 / BRONZEWIRE SG2"
         assert item["grade"] == "SG2"
         assert item["dimensions"] == "0.80 mm"
-        assert item["standards"] == ["EN ISO 14341-A", "M21", "C1"]
+        assert item["standards"] == ["EN ISO 14341-A"]
+        assert item["classifications"] == ["M21", "C1"]
         assert item["chemical_composition"]["C"] == 0.08
 
     def test_repeated_product_rows_stay_independent(self):
@@ -59,8 +60,8 @@ class IdentityFieldMapperTests:
         )
         item = result.rows[0]
         assert item["product_name"] == "WELDWIRE SG2"
-        assert "M21" in (item["standards"] or [])
-        assert "C1" in (item["standards"] or [])
+        assert "M21" in (item["classifications"] or [])
+        assert "C1" in (item["classifications"] or [])
         assert "EN ISO 14341-A" in (item["standards"] or [])
         assert item["grade"] == "SG2"
         assert item["product_name"] != "EN ISO 14341-A"
@@ -105,8 +106,8 @@ class IdentityFieldMapperTests:
         item = result.rows[0]
         assert item["product_name"] is None
         assert item["grade"] is None
-        assert "M21" in (item["standards"] or [])
-        assert "C1" in (item["standards"] or [])
+        assert "M21" in (item["classifications"] or [])
+        assert "C1" in (item["classifications"] or [])
 
     def test_does_not_synthesize_grade_from_unmapped_standard(self):
         result = apply_identity_field_mapping(
@@ -188,4 +189,15 @@ def test_classification_rows_collapse_without_guessing_product():
     assert len(mapped.rows) == 1
     assert mapped.rows[0]["product_name"] is None
     assert mapped.rows[0]["grade"] is None
-    assert mapped.rows[0]["standards"] == ["M21", "C1"]
+    assert mapped.rows[0]["classifications"] == ["M21", "C1"]
+
+
+def test_alias_keys_lift_certificate_and_po_independently():
+    result = apply_identity_field_mapping(
+        [{"Cert": "CERT-9", "PO": "PO-3", "Heat": "H9001"}],
+        metadata={},
+    )
+    item = result.rows[0]
+    assert item["certificate_number"] == "CERT-9"
+    assert item["order_number"] == "PO-3"
+    assert item["heat_number"] == "H9001"
