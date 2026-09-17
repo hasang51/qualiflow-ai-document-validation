@@ -47,10 +47,12 @@ interface RowShape {
   heatNo: string | null
   itemId: string | null
   productName: string | null
+  productDetails: string | null
   grade: string | null
   weightOrLength: string | null
   dimensions: string | null
   standards: string[]
+  classifications: string[]
   yieldMpa: number | null
   tensileMpa: number | null
   elongation: number | null
@@ -151,10 +153,12 @@ export function ItemsTable({
           MISSING_VALUE,
         ),
         productName: item.product_name ?? null,
+        productDetails: item.product_details ?? null,
         grade: item.grade,
         weightOrLength: item.weight_or_length,
         dimensions: item.dimensions ?? null,
         standards: item.standards ?? [],
+        classifications: item.classifications ?? [],
         yieldMpa: item.mechanical_properties?.yield_strength_mpa ?? null,
         tensileMpa: item.mechanical_properties?.tensile_strength_mpa ?? null,
         elongation: item.mechanical_properties?.elongation_percentage ?? null,
@@ -391,6 +395,12 @@ export function ItemsTable({
                               {row.original.productName}
                             </p>
                           )}
+                          {row.original.productDetails && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Product details:</span>
+                              {row.original.productDetails}
+                            </p>
+                          )}
                           <p className="text-slate-300">
                             <span className="mr-2 text-slate-500">Grade:</span>
                             {formatNullable(row.original.grade)}
@@ -413,6 +423,12 @@ export function ItemsTable({
                               {items[row.original.index].order_number}
                             </p>
                           )}
+                          {items[row.original.index]?.order_date && (
+                            <p className="text-slate-300">
+                              <span className="mr-2 text-slate-500">Order date:</span>
+                              {items[row.original.index].order_date}
+                            </p>
+                          )}
                           {items[row.original.index]?.dimensions && (
                             <p className="text-slate-300">
                               <span className="mr-2 text-slate-500">Dimensions:</span>
@@ -425,6 +441,13 @@ export function ItemsTable({
                               {items[row.original.index].standards!.join(', ')}
                             </p>
                           )}
+                          {items[row.original.index]?.classifications &&
+                            items[row.original.index].classifications!.length > 0 && (
+                              <p className="text-slate-300">
+                                <span className="mr-2 text-slate-500">Classifications:</span>
+                                {items[row.original.index].classifications!.join(', ')}
+                              </p>
+                            )}
                           {items[row.original.index]?.chemical_composition && (
                             <p className="text-slate-300">
                               <span className="mr-2 text-slate-500">Chemistry:</span>

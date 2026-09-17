@@ -64,6 +64,8 @@ export function formatReviewReason(code: string): string {
     switch (prefix) {
       case 'missing_critical_field':
         return `Missing critical field: ${fieldLabel}`
+      case 'conflicting_labeled_candidates':
+        return `Conflicting labeled candidates: ${fieldLabel}`
       case 'low_confidence':
         return `Low confidence: ${fieldLabel}`
       case 'validation_conflict':

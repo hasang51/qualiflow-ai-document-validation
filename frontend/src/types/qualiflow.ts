@@ -48,14 +48,17 @@ export interface ExtractedItem {
   coil_number?: string | null
   certificate_number: string | null
   order_number: string | null
+  order_date?: string | null
   traceability_identifier_type?: string | null
   traceability_identifier_label?: string | null
   traceability_identifier_value?: string | null
   product_name?: string | null
+  product_details?: string | null
   grade: string | null
   weight_or_length: string | null
   dimensions?: string | null
   standards?: string[] | null
+  classifications?: string[] | null
   chemical_composition?: Record<string, number | null> | null
   mechanical_properties: MechanicalProperties | null
   validation: ValidationResult | null
@@ -82,6 +85,7 @@ export interface ExtractionResponse {
   coil_number?: string | null
   certificate_number: string | null
   order_number: string | null
+  order_date?: string | null
   traceability_identifier_type?: string | null
   traceability_identifier_label?: string | null
   traceability_identifier_value?: string | null

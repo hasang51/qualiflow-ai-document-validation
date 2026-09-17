@@ -47,8 +47,8 @@ function fieldAliases(field: string): string[] {
     item_id: ['item_id', 'pipe_id', 'item', 'pipe_coil_id', 'coil', 'pipe'],
     pipe_id: ['pipe_id', 'item_id', 'item', 'pipe_coil_id', 'coil', 'pipe'],
     pipe_coil_id: ['item_id', 'pipe_id', 'item', 'pipe_coil_id', 'coil', 'pipe'],
-    certificate_number: ['certificate_number', 'certificate', 'cert'],
-    order_number: ['order_number', 'order', 'po'],
+    certificate_number: ['certificate_number', 'certificate', 'cert', 'cert no', 'certificate no'],
+    order_number: ['order_number', 'order', 'po', 'purchase order', 'po no'],
   }
   return aliases[field] ?? [field]
 }
