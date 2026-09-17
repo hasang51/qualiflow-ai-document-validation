@@ -10,6 +10,7 @@ semantics only (no supplier-specific rules).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -73,6 +74,14 @@ _ROW_META_KEYS: frozenset[str] = frozenset(
         "MECHANICAL_PROPERTIES",
         "MECHANICAL TABLE ROWS",
         "MECHANICAL_TABLE_ROWS",
+        "CHEMICAL COMPOSITION",
+        "CHEMICAL_COMPOSITION",
+        "CHEMICAL TABLE ROWS",
+        "CHEMICAL_TABLE_ROWS",
+        "SOURCE PAGE",
+        "SOURCE_PAGE",
+        "DIMENSIONS",
+        "STANDARDS",
     }
 )
 
@@ -449,6 +458,252 @@ def map_mechanical_table_rows(table_rows: list[dict[str, Any]]) -> MechanicalTab
     )
 
 
+_ELEMENT_SYMBOL_ALIASES: dict[str, str] = {
+    "C": "C",
+    "CARBON": "C",
+    "SI": "Si",
+    "SILICON": "Si",
+    "MN": "Mn",
+    "MANGANESE": "Mn",
+    "P": "P",
+    "PHOSPHORUS": "P",
+    "PHOSPHOROUS": "P",
+    "S": "S",
+    "SULPHUR": "S",
+    "SULFUR": "S",
+    "CU": "Cu",
+    "COPPER": "Cu",
+    "NI": "Ni",
+    "NICKEL": "Ni",
+    "CR": "Cr",
+    "CHROMIUM": "Cr",
+    "MO": "Mo",
+    "MOLYBDENUM": "Mo",
+    "V": "V",
+    "VANADIUM": "V",
+    "AL": "Al",
+    "ALUMINIUM": "Al",
+    "ALUMINUM": "Al",
+    "NB": "Nb",
+    "NIOBIUM": "Nb",
+    "COLUMBIUM": "Nb",
+    "TI": "Ti",
+    "TITANIUM": "Ti",
+    "N": "N",
+    "NITROGEN": "N",
+    "B": "B",
+    "BORON": "B",
+    "FE": "Fe",
+    "IRON": "Fe",
+    "W": "W",
+    "TUNGSTEN": "W",
+    "CO": "Co",
+    "COBALT": "Co",
+    "PB": "Pb",
+    "LEAD": "Pb",
+    "SN": "Sn",
+    "TIN": "Sn",
+    "AS": "As",
+    "ARSENIC": "As",
+    "SB": "Sb",
+    "ANTIMONY": "Sb",
+    "ZR": "Zr",
+    "ZIRCONIUM": "Zr",
+    "CA": "Ca",
+    "CALCIUM": "Ca",
+    "MG": "Mg",
+    "MAGNESIUM": "Mg",
+    "ZN": "Zn",
+    "ZINC": "Zn",
+}
+
+
+@dataclass
+class ChemicalTableMappingResult:
+    chemical_composition: dict[str, float] = field(default_factory=dict)
+    uncertain: bool = False
+    tokens: list[str] = field(default_factory=list)
+    trace: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "chemical_composition": dict(self.chemical_composition),
+            "uncertain": self.uncertain,
+            "tokens": list(self.tokens),
+            "trace": dict(self.trace),
+        }
+
+
+def _parse_chemistry_value(raw: Any) -> float | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        value = float(raw)
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return value
+    text = _text(raw)
+    if not text:
+        return None
+    cleaned = text.replace("%", "").replace(" ", "").replace(",", ".")
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+    if math.isnan(value) or math.isinf(value):
+        return None
+    return value
+
+
+def parse_chemistry_value(raw: Any) -> float | None:
+    return _parse_chemistry_value(raw)
+
+
+def canonicalize_element_symbol(value: Any) -> str | None:
+    """Return a canonical chemical-element symbol for a table label."""
+
+    if value is None:
+        return None
+
+    normalized = re.sub(r"[^A-Z0-9]", "", str(value).upper())
+    if not normalized:
+        return None
+
+    return _ELEMENT_SYMBOL_ALIASES.get(normalized)
+
+
+def _chemical_property_label(row: dict[str, Any]) -> str:
+    for key in (*_PROPERTY_LABEL_KEYS, "element"):
+        value = _text(row.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _row_looks_like_chemical_property(row: dict[str, Any]) -> bool:
+    label = _chemical_property_label(row)
+    if label and canonicalize_element_symbol(label):
+        return True
+    for key in row:
+        if canonicalize_element_symbol(str(key)):
+            return True
+    return False
+
+
+def collect_chemical_table_rows(
+    item_payload: dict[str, Any],
+    items_raw: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collect explicit or derived chemical composition table rows from Stage B output."""
+
+    explicit = item_payload.get("chemical_table_rows")
+    if isinstance(explicit, list):
+        rows = [row for row in explicit if isinstance(row, dict)]
+        if rows:
+            return rows
+
+    derived: list[dict[str, Any]] = []
+    for row in items_raw:
+        if isinstance(row, dict) and _row_looks_like_chemical_property(row):
+            derived.append(row)
+    if len(derived) >= 2:
+        return derived
+    return []
+
+
+def _first_source_page(*row_groups: list[dict[str, Any]]) -> int | None:
+    for group in row_groups:
+        for row in group:
+            page = row.get("source_page")
+            if isinstance(page, int) and not isinstance(page, bool) and page >= 1:
+                return page
+    return None
+
+
+def map_chemical_table_rows(table_rows: list[dict[str, Any]]) -> ChemicalTableMappingResult:
+    """Map labeled chemistry table rows to observed element values."""
+
+    composition: dict[str, float] = {}
+    uncertain = False
+    row_traces: list[dict[str, Any]] = []
+    field_candidates: dict[str, list[float]] = {}
+
+    for index, row in enumerate(table_rows):
+        if not isinstance(row, dict):
+            continue
+        label = _chemical_property_label(row)
+        symbol = canonicalize_element_symbol(label) if label else None
+        result_entries, validation_entries, other_entries = _extract_result_candidates(row)
+        selected_raw, row_uncertain = _select_result_value(result_entries, other_entries)
+        if row_uncertain:
+            uncertain = True
+
+        if symbol is not None:
+            row_trace: dict[str, Any] = {
+                "row_index": index,
+                "property_label": label,
+                "element": symbol,
+                "result_columns": [source for source, _ in result_entries],
+                "validation_columns": [source for source, _ in validation_entries],
+                "selected_raw": selected_raw,
+                "uncertain": row_uncertain,
+            }
+            row_traces.append(row_trace)
+            if selected_raw is None and not result_entries and validation_entries:
+                row_trace["skipped"] = "validation_only_columns"
+                continue
+            parsed = _parse_chemistry_value(selected_raw)
+            if parsed is not None:
+                composition[symbol] = parsed
+                field_candidates.setdefault(symbol, []).append(parsed)
+            continue
+
+        wide_hits = 0
+        for key, value in row.items():
+            element = canonicalize_element_symbol(str(key))
+            if element is None or value is None or (isinstance(value, str) and not str(value).strip()):
+                continue
+            normalized_key = _normalize_column_key(str(key))
+            kind = _column_kind(normalized_key)
+            if kind == "validation":
+                continue
+            parsed = _parse_chemistry_value(value)
+            if parsed is None:
+                continue
+            composition[element] = parsed
+            field_candidates.setdefault(element, []).append(parsed)
+            wide_hits += 1
+        if wide_hits:
+            row_traces.append(
+                {
+                    "row_index": index,
+                    "property_label": label,
+                    "wide_element_columns": wide_hits,
+                    "uncertain": row_uncertain,
+                }
+            )
+
+    for candidates in field_candidates.values():
+        unique = {round(value, 6) for value in candidates}
+        if len(unique) > 1:
+            uncertain = True
+
+    tokens: list[str] = []
+    if uncertain:
+        tokens.append("chemical_table_alignment_uncertain")
+
+    return ChemicalTableMappingResult(
+        chemical_composition=composition,
+        uncertain=uncertain,
+        tokens=tokens,
+        trace={
+            "strategy": "chemical_table_row_column_alignment",
+            "row_traces": row_traces,
+            "field_candidates": field_candidates,
+        },
+    )
+
+
 def _row_looks_like_mechanical_property(row: dict[str, Any]) -> bool:
     label = _property_label(row)
     if not label:
@@ -483,58 +738,80 @@ def apply_mechanical_table_mapping(
     item_payload: dict[str, Any],
     items_raw: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
-    """Apply mechanical table mapping to extracted item rows in-place."""
+    """Apply mechanical and chemical table mapping to extracted item rows in-place."""
 
     table_rows = collect_mechanical_table_rows(item_payload, items_raw)
-    if not table_rows:
-        return rows, [], {}
+    mapping = map_mechanical_table_rows(table_rows) if table_rows else MechanicalTableMappingResult()
+    chemical_rows = collect_chemical_table_rows(item_payload, items_raw)
+    chemical = map_chemical_table_rows(chemical_rows) if chemical_rows else ChemicalTableMappingResult()
 
-    mapping = map_mechanical_table_rows(table_rows)
+    tokens = list(mapping.tokens)
+    tokens.extend(chemical.tokens)
+    trace: dict[str, Any] = dict(mapping.trace) if mapping.trace else {}
+    if chemical.trace or chemical.chemical_composition:
+        trace["chemical"] = chemical.to_dict()
+
+    has_mechanicals = any(value is not None for value in mapping.mechanical_properties.values())
+    has_chemistry = bool(chemical.chemical_composition)
+    source_page = _first_source_page(table_rows, chemical_rows, items_raw)
+
     if not rows:
-        populated = [
-            value
-            for value in mapping.mechanical_properties.values()
-            if value is not None
-        ]
-        if populated:
-            rows = [
-                {
-                    "mechanical_properties": dict(mapping.mechanical_properties),
-                    "needs_review": mapping.uncertain,
-                    **(
-                        {"_mechanical_auxiliary": mapping.auxiliary}
-                        if mapping.auxiliary
-                        else {}
-                    ),
-                }
-            ]
+        if not has_mechanicals and not has_chemistry:
+            return rows, tokens, trace
+        synthesized: dict[str, Any] = {
+            "needs_review": mapping.uncertain or chemical.uncertain,
+        }
+        if has_mechanicals:
+            synthesized["mechanical_properties"] = dict(mapping.mechanical_properties)
+            if mapping.auxiliary:
+                synthesized["_mechanical_auxiliary"] = mapping.auxiliary
             mapping.trace["synthesized_item_from_mechanical_table"] = True
-        else:
-            return rows, mapping.tokens, mapping.trace
+            trace["synthesized_item_from_mechanical_table"] = True
+        if has_chemistry:
+            synthesized["chemical_composition"] = dict(chemical.chemical_composition)
+            trace["synthesized_item_from_chemical_table"] = True
+        if source_page is not None:
+            synthesized["source_page"] = source_page
+        return [synthesized], tokens, trace
 
     target = rows[0]
-    mechanical = target.get("mechanical_properties")
-    if not isinstance(mechanical, dict):
-        mechanical = {}
-        target["mechanical_properties"] = mechanical
+    if has_mechanicals:
+        mechanical = target.get("mechanical_properties")
+        if not isinstance(mechanical, dict):
+            mechanical = {}
+            target["mechanical_properties"] = mechanical
+        for field_name, value in mapping.mechanical_properties.items():
+            if value is not None:
+                mechanical[field_name] = value
+        if mapping.auxiliary:
+            target["_mechanical_auxiliary"] = mapping.auxiliary
 
-    for field_name, value in mapping.mechanical_properties.items():
-        if value is not None:
-            mechanical[field_name] = value
+    if has_chemistry:
+        existing = target.get("chemical_composition")
+        merged = dict(existing) if isinstance(existing, dict) else {}
+        for element, value in chemical.chemical_composition.items():
+            if merged.get(element) is None:
+                merged[element] = value
+        target["chemical_composition"] = merged
 
-    if mapping.auxiliary:
-        target["_mechanical_auxiliary"] = mapping.auxiliary
+    if source_page is not None and target.get("source_page") is None:
+        target["source_page"] = source_page
 
-    if mapping.uncertain:
+    if mapping.uncertain or chemical.uncertain:
         target["needs_review"] = True
 
-    return rows, mapping.tokens, mapping.trace
+    return rows, tokens, trace
 
 
 __all__ = [
+    "ChemicalTableMappingResult",
     "MechanicalTableMappingResult",
     "apply_mechanical_table_mapping",
+    "canonicalize_element_symbol",
     "classify_property_label",
+    "collect_chemical_table_rows",
     "collect_mechanical_table_rows",
+    "map_chemical_table_rows",
     "map_mechanical_table_rows",
+    "parse_chemistry_value",
 ]

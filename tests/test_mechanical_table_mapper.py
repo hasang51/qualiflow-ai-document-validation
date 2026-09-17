@@ -4,8 +4,18 @@ import unittest
 
 from app.services.mechanical_table_mapper import (
     apply_mechanical_table_mapping,
+    canonicalize_element_symbol,
+    map_chemical_table_rows,
     map_mechanical_table_rows,
 )
+
+
+def test_canonicalize_element_symbol():
+    assert canonicalize_element_symbol("C") == "C"
+    assert canonicalize_element_symbol("carbon") == "C"
+    assert canonicalize_element_symbol("Si") == "Si"
+    assert canonicalize_element_symbol("silicon") == "Si"
+    assert canonicalize_element_symbol("unknown") is None
 
 
 class MechanicalTableMapperTests(unittest.TestCase):
@@ -146,6 +156,76 @@ class MechanicalTableMapperTests(unittest.TestCase):
         self.assertEqual(mp["elongation_percentage"], 52.0)
         self.assertEqual(trace["strategy"], "mechanical_table_row_column_alignment")
         self.assertEqual(tokens, [])
+
+
+class ChemicalTableMapperTests(unittest.TestCase):
+    def test_maps_chemistry_results_and_ignores_specified(self):
+        table_rows = [
+            {"property": "C", "Specified": "0.06-0.14", "Results": 0.08},
+            {"property": "Si", "Min": 0.50, "Max": 1.00, "Results": 0.85},
+            {"property": "Mn", "Results": 1.45},
+        ]
+
+        result = map_chemical_table_rows(table_rows)
+
+        self.assertEqual(result.chemical_composition["C"], 0.08)
+        self.assertEqual(result.chemical_composition["Si"], 0.85)
+        self.assertEqual(result.chemical_composition["Mn"], 1.45)
+        self.assertFalse(result.uncertain)
+
+    def test_does_not_use_specified_when_results_missing(self):
+        table_rows = [{"property": "C", "Specified": "0.06-0.14", "Min": 0.06}]
+
+        result = map_chemical_table_rows(table_rows)
+
+        self.assertNotIn("C", result.chemical_composition)
+
+    def test_maps_wide_element_row(self):
+        result = map_chemical_table_rows([{"C": 0.08, "Si": 0.85, "Mn": 1.45, "P": 0.015}])
+        self.assertEqual(result.chemical_composition["C"], 0.08)
+        self.assertEqual(result.chemical_composition["Si"], 0.85)
+
+    def test_synthesizes_item_from_chemistry_when_items_empty(self):
+        item_payload = {
+            "chemical_table_rows": [
+                {"property": "C", "Results": 0.08},
+                {"property": "Si", "Results": 0.85},
+            ]
+        }
+
+        updated_rows, tokens, trace = apply_mechanical_table_mapping(
+            [],
+            item_payload=item_payload,
+            items_raw=[],
+        )
+
+        self.assertEqual(len(updated_rows), 1)
+        self.assertEqual(updated_rows[0]["chemical_composition"]["C"], 0.08)
+        self.assertTrue(trace.get("synthesized_item_from_chemical_table"))
+        self.assertEqual(tokens, [])
+
+    def test_synthesizes_item_from_chemistry_and_mechanicals(self):
+        item_payload = {
+            "mechanical_table_rows": [
+                {"property": "Proof Strength Rp0.2", "Results": 470},
+                {"property": "Tensile Strength Rm", "Results": 560},
+                {"property": "Elongation", "Results": 26},
+            ],
+            "chemical_table_rows": [{"property": "C", "Results": 0.08, "source_page": 1}],
+        }
+
+        updated_rows, tokens, trace = apply_mechanical_table_mapping(
+            [],
+            item_payload=item_payload,
+            items_raw=[],
+        )
+
+        self.assertEqual(len(updated_rows), 1)
+        self.assertEqual(updated_rows[0]["mechanical_properties"]["yield_strength_mpa"], 470.0)
+        self.assertEqual(updated_rows[0]["chemical_composition"]["C"], 0.08)
+        self.assertEqual(updated_rows[0]["source_page"], 1)
+        self.assertTrue(trace.get("synthesized_item_from_mechanical_table"))
+        self.assertTrue(trace.get("synthesized_item_from_chemical_table"))
 
 
 if __name__ == "__main__":
