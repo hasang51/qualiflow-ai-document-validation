@@ -819,6 +819,15 @@ def _normalize_chemical_composition(raw: Any) -> dict[str, float | None] | None:
     return composition or None
 
 
+def _mechanical_confidence(field_conf: dict[str, Any], key: str, default: float = 1.0) -> float:
+    """Return a numeric mechanical-field confidence; null is fail-closed."""
+
+    raw = field_conf.get(key, default)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return 0.0
+    return float(raw)
+
+
 def _normalize_row_dict(
     item_raw: dict[str, Any],
     row_index: int = 0,
@@ -844,13 +853,13 @@ def _normalize_row_dict(
     mp_payload: dict[str, Any] | None = None
     if isinstance(mp_raw, dict):
         ys = _value_from_canonical_or_alias(mp_raw, "yield_strength_mpa")
-        if field_conf.get("yield_strength_mpa", 1.0) < 0.8:
+        if _mechanical_confidence(field_conf, "yield_strength_mpa") < 0.8:
             ys = None
         ts = _value_from_canonical_or_alias(mp_raw, "tensile_strength_mpa")
-        if field_conf.get("tensile_strength_mpa", 1.0) < 0.8:
+        if _mechanical_confidence(field_conf, "tensile_strength_mpa") < 0.8:
             ts = None
         el = _value_from_canonical_or_alias(mp_raw, "elongation_percentage")
-        if field_conf.get("elongation_percentage", 1.0) < 0.8:
+        if _mechanical_confidence(field_conf, "elongation_percentage") < 0.8:
             el = None
         mp_payload = {
             "yield_strength_mpa": ys,

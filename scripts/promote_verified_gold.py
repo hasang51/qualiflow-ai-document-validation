@@ -147,8 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[ok] gold written to: {args.output_dir}")
     print(
         "[next] run: python -m scripts.run_eval "
-        f"--metadata data/gold/metadata_20.csv "
-        f"--predictions outputs/predictions"
+        "--metadata data/gold/metadata_20.csv "
+        "--predictions outputs/predictions"
     )
     return 0
 
