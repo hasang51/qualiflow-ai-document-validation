@@ -54,7 +54,7 @@ jobs:
           --cov-fail-under=65
 
   frontend:
-    name: Frontend build
+    name: Frontend lint, tests and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,4 +67,6 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm run lint
+      - run: npm test
       - run: npm run build

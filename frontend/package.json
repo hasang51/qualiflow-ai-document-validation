@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "tsc -p tsconfig.tests.json && printf '{\"type\":\"commonjs\"}' > .test-build/package.json && node .test-build/lib/critical-identifiers.test.js && node .test-build/lib/format.test.js && node .test-build/lib/presentation-safety.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
