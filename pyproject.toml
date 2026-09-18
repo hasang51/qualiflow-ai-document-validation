@@ -22,6 +22,7 @@ dependencies = [
     "boto3==1.37.6",
     "pdf2image==1.17.0",
     "pypdf>=4.0.0,<6",
+    "cryptography>=42.0.0,<47",
     "pillow>=11.0.0,<12",
     "opencv-python-headless==4.11.0.86",
     "numpy==2.2.4",

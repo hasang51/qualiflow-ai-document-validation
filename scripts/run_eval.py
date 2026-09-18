@@ -25,7 +25,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,7 +37,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.evaluate_outputs import run_academic_evaluation
+from scripts.evaluate_outputs import _write_eval_report, run_academic_evaluation
 
 
 def _utc_ts() -> str:
@@ -90,8 +92,12 @@ class MockExtractionAdapter:
     """
 
     name: str = "mock"
+    last_status: str = "skipped"
+    last_detail: str = ""
 
     def predict(self, row: dict[str, str], pdf_path: Path) -> dict[str, Any] | None:
+        self.last_status = "skipped"
+        self.last_detail = "mock adapter does not call a real pipeline"
         return None
 
 
@@ -102,13 +108,17 @@ class ExistingPipelineAdapter:
     mode: str = "D"
     force_route: str | None = None
     name: str = "existing"
+    last_status: str = "ok"
+    last_detail: str = ""
 
     def predict(self, row: dict[str, str], pdf_path: Path) -> dict[str, Any] | None:
         try:
             from app.services.batch_policy import BatchRunPolicy
             from scripts.run_batch_extraction import _run_single
         except Exception as exc:  # noqa: BLE001 - dependency availability is environment-specific.
-            print(f"[warn] real pipeline adapter unavailable: {exc}", file=sys.stderr)
+            self.last_status = "failed"
+            self.last_detail = f"real pipeline adapter unavailable: {exc}"
+            print(f"[warn] {self.last_detail}", file=sys.stderr)
             return None
 
         batch_row = {
@@ -126,8 +136,17 @@ class ExistingPipelineAdapter:
             policy=policy,
         )
         if error:
-            print(f"[warn] extraction failed for {row['doc_id']}: {error}", file=sys.stderr)
+            self.last_status = "failed"
+            self.last_detail = error
+            print(f"[fail] extraction failed for {row['doc_id']}: {error}", file=sys.stderr)
             return None
+        if per_document is None:
+            self.last_status = "skipped"
+            self.last_detail = str((_summary or {}).get("error") or (_summary or {}).get("status") or "no prediction")
+            print(f"[skip] {row['doc_id']}: {self.last_detail}")
+            return None
+        self.last_status = "ok"
+        self.last_detail = ""
         return per_document
 
 
@@ -147,6 +166,10 @@ def _write_prediction(path: Path, payload: dict[str, Any]) -> None:
 def _print_summary(summary: dict[str, Any], out_dir: Path, predictions_dir: Path) -> None:
     wanted = [
         "n_documents",
+        "successful",
+        "failed",
+        "skipped",
+        "n_verified_documents",
         "field_accuracy",
         "raw_exact_accuracy",
         "business_normalized_accuracy",
@@ -155,9 +178,21 @@ def _print_summary(summary: dict[str, Any], out_dir: Path, predictions_dir: Path
         "document_type_accuracy",
         "processing_decision_accuracy",
         "review_rate",
+        "unsafe_auto_accept_count",
         "unsafe_auto_accept_rate",
+        "fail_closed_review_count",
+        "extraction_miss_count",
+        "traceability_exact_matches",
+        "traceability_exact_misses",
         "missing_required_field_rate",
+        "schema_failures",
         "average_latency_ms",
+        "p50_latency_ms",
+        "p95_latency_ms",
+        "total_input_tokens",
+        "total_output_tokens",
+        "estimated_cost_usd",
+        "estimated_cost_per_document_usd",
     ]
     print("\nEvaluation summary")
     print("------------------")
@@ -188,12 +223,15 @@ def run(
     generated = 0
     reused = 0
     skipped = 0
+    failed = 0
+    sleep_s = float(os.getenv("QUALIFLOW_BATCH_SLEEP_S", "0") or 0)
 
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
         doc_id = row["doc_id"].strip()
         pred_path = predictions_dir / f"{doc_id}.json"
         if reuse_predictions and pred_path.exists():
             reused += 1
+            generated += 1
             continue
 
         pdf_path = _resolve_document_path(row, documents_root)
@@ -208,16 +246,22 @@ def run(
 
         prediction = adapter.predict(row, pdf_path)
         if prediction is None:
-            print(f"[skip] {doc_id}: adapter '{adapter.name}' produced no prediction")
-            skipped += 1
+            status = getattr(adapter, "last_status", "skipped")
+            if status == "failed":
+                failed += 1
+            else:
+                skipped += 1
             continue
 
         _write_prediction(pred_path, prediction)
         generated += 1
         print(f"[ok] wrote prediction: {pred_path}")
+        if sleep_s > 0 and index < len(rows):
+            print(f"[info] sleeping {sleep_s:.0f}s before next document")
+            time.sleep(sleep_s)
 
     print(
-        f"[info] prediction generation complete: generated={generated} reused={reused} skipped={skipped}"
+        f"[info] prediction generation complete: generated={generated} reused={reused} failed={failed} skipped={skipped}"
     )
     summary = run_academic_evaluation(
         metadata_path=metadata_path,
@@ -229,6 +273,37 @@ def run(
         output_csv=output_csv,
         output_md=output_md,
     )
+    run_stats = {
+        "successful": generated,
+        "failed": failed,
+        "skipped": skipped,
+        "reused": reused,
+        "total_pdfs": len(rows),
+    }
+    summary = {**summary, **run_stats}
+    (out_dir / "run_stats.json").write_text(
+        json.dumps(run_stats, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    bucket_path = out_dir / "metrics_by_quality_bucket.csv"
+    by_bucket: list[dict[str, Any]] = []
+    if bucket_path.exists():
+        with bucket_path.open("r", encoding="utf-8", newline="") as handle:
+            by_bucket = list(csv.DictReader(handle))
+    failure_count = 0
+    failure_path = out_dir / "failure_cases.csv"
+    if failure_path.exists():
+        with failure_path.open("r", encoding="utf-8", newline="") as handle:
+            failure_count = max(0, sum(1 for _ in handle) - 1)
+    for report_name in ("eval_report.md", "eval_summary.md"):
+        _write_eval_report(
+            path=out_dir / report_name,
+            metadata_path=metadata_path,
+            predictions_dir=predictions_dir,
+            summary=summary,
+            failure_count=failure_count,
+            by_bucket=by_bucket,
+        )
     return summary
 
 

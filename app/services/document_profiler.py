@@ -180,11 +180,21 @@ def _extract_text_stats(pdf_path: Path) -> tuple[int, float, bool, bool, bool, b
 
     try:
         reader = PdfReader(str(pdf_path))
+        if getattr(reader, "is_encrypted", False):
+            try:
+                reader.decrypt("")
+            except Exception as exc:
+                logger.warning("pypdf could not decrypt %s: %s", pdf_path, exc)
+                return 0, 0.0, False, False, False, False
     except Exception as exc:
         logger.warning("pypdf failed to open %s: %s", pdf_path, exc)
         return 0, 0.0, False, False, False, False
 
-    page_count = len(reader.pages)
+    try:
+        page_count = len(reader.pages)
+    except Exception as exc:
+        logger.warning("pypdf failed to read page count for %s: %s", pdf_path, exc)
+        return 0, 0.0, False, False, False, False
     if page_count == 0:
         return 0, 0.0, False, False, False, False
 
