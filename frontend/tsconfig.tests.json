@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".test-build",
+    "allowImportingTsExtensions": false,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/lib/critical-identifiers.test.ts",
+    "src/lib/format.test.ts",
+    "src/lib/presentation-safety.test.ts"
+  ]
+}
