@@ -26,7 +26,7 @@ function hasExplicitPipeOrItemIdentifiers(items: ExtractedItem[]): boolean {
   })
 }
 
-export function sanitizeModelRemarks(text: string): string | null {
+function sanitizeModelRemarks(text: string): string | null {
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
